@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07121c">
+  <title>Marine Motion · Data Console</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Marine Motion home"><span class="brand-mark">≈</span><span>PELAGIC<span class="brand-light"> / MOTION</span></span></a>
+      <div class="top-meta"><span class="live-dot"></span><span>FIELD DATA CONSOLE</span><span class="top-divider">·</span><span id="updated-at">Loading index…</span></div>
+      <a class="repo-link" href="https://github.com/hui-aqua/Storage" target="_blank" rel="noreferrer">Repository <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-line"></span> OFFSHORE AQUACULTURE · MOTION MONITORING</div>
+          <h1>Wave &amp; platform<br><span>acceleration.</span></h1>
+          <p class="hero-copy">Measurements captured aboard a marine platform. Explore tri-axis motion records and download the original sensor files.</p>
+        </div>
+        <div class="hero-stamp"><span class="stamp-orbit">◎</span><span>CORE S3<br>LOGGER</span></div>
+      </section>
+
+      <section class="metrics" aria-label="Data overview">
+        <article class="metric"><span class="metric-label">MEASUREMENTS</span><strong id="metric-count">—</strong><span class="metric-note">published records</span></article>
+        <article class="metric"><span class="metric-label">DATA VOLUME</span><strong id="metric-volume">—</strong><span class="metric-note">indexed raw files</span></article>
+        <article class="metric"><span class="metric-label">SAMPLE RATE</span><strong>50<span class="metric-unit">Hz</span></strong><span class="metric-note">nominal acquisition</span></article>
+        <article class="metric"><span class="metric-label">LATEST UPLOAD</span><strong id="metric-latest" class="metric-latest">—</strong><span class="metric-note" id="device-label">device status</span></article>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel records-panel">
+          <div class="panel-heading"><div><div class="section-kicker">01 / LIBRARY</div><h2>Measurements</h2></div><span class="count-pill" id="list-count">0</span></div>
+          <label class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Filter by device or date" autocomplete="off"></label>
+          <div id="record-list" class="record-list" aria-live="polite"><div class="empty-state">Loading the public data index…</div></div>
+          <div class="panel-foot"><span class="foot-indicator"></span><span id="index-status">CONNECTING TO INDEX</span></div>
+        </aside>
+
+        <section class="panel chart-panel" aria-label="Acceleration chart">
+          <div class="panel-heading chart-heading"><div><div class="section-kicker">02 / WAVEFORM</div><h2 id="chart-title">Select a measurement</h2></div><a id="download-link" class="download-button disabled" href="#" aria-disabled="true" download><span>↓</span> Download BIN</a></div>
+          <div class="chart-subhead"><span id="chart-subtitle">Three-axis acceleration · 50 Hz</span><span id="chart-range">—</span></div>
+          <div class="plot-wrap" id="plot-wrap"><canvas id="chart" aria-label="X, Y and Z acceleration time series"></canvas><div class="plot-empty" id="plot-empty"><span class="plot-icon">⌁</span><strong>No measurement selected</strong><span>Choose a record from the library to view its waveform.</span></div></div>
+          <div class="chart-legend"><span><i class="legend-dot x"></i>X axis</span><span><i class="legend-dot y"></i>Y axis</span><span><i class="legend-dot z"></i>Z axis</span><span class="chart-unit" id="chart-unit">Acceleration (m/s²)</span></div>
+          <div class="chart-foot"><span id="sample-info">Awaiting selection</span><span>INTERLEAVED XYZ · 50 SAMPLES/S</span></div>
+        </section>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="panel-heading"><div><div class="section-kicker">03 / INGESTION</div><h2>Upload history</h2></div><span class="history-caption">Newest first <span>↘</span></span></div>
+        <div class="table-scroll"><table><thead><tr><th>STATUS</th><th>DEVICE</th><th>CAPTURED (UTC)</th><th>FILE</th><th>SIZE</th><th>CHECKSUM</th><th></th></tr></thead><tbody id="history-body"><tr><td class="table-empty" colspan="7">Upload records will appear here when the data index is populated.</td></tr></tbody></table></div>
+      </section>
+      <footer><span>PELAGIC / MOTION DATA CONSOLE</span><span>PUBLIC DATASET · SOURCE FILES ARE PUBLICLY ACCESSIBLE</span></footer>
+    </main>
+  </div>
+</body>
+</html>
