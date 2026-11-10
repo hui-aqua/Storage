@@ -1,34 +1,30 @@
-# M5Stack Marine Data Logger
+# M5Stack Marine Motion Logger
 
-本仓库从第一阶段验证起步：CoreS3 测量数据以 multipart/form-data 上传至 FastAPI，先在本地目录落盘，并核对 5 MiB BIN 文件大小及 SHA-256。GitHub 远程数据存储尚未接入。
+CoreS3 logs motion from a BMI270 IMU to the SD card and presents published daily measurements in a static GitHub Pages dashboard. The data contract is designed for 100 Hz acquisition: permanent 22-byte raw records plus a 10 Hz daily summary CSV. Each device writes under `/motion/` using its configured device ID.
 
-## GitHub Pages 仪表盘
+## On-device daily files
 
-仪表盘源码位于 `dashboard/`，会由 GitHub Actions 部署到 [https://hui-aqua.github.io/Storage/](https://hui-aqua.github.io/Storage/)。它从 `data/index.json` 读取公开测量索引，并展示测量列表、三轴波形、原始文件下载和上传记录。初始索引为空，等上传服务写入文件与元数据后会自动展示。
+- `CS3_01_RAW_YYYYMMDD.bin`: metadata followed by packed little-endian records containing extended BMI270 sensor time, signed accelerometer and gyroscope counts, and validity/saturation/overflow/time flags. RAW files stay on the SD card permanently and are never sent by the daily uploader.
+- `CS3_01_SUMMARY_YYYYMMDD.csv`: one row per ten decoded raw samples, with UTC and sensor time, signed axis means converted to g and °/s, absolute axis and magnitude peaks, temperature, battery voltage, saturation flags, and missed sample count.
+- Before UTC is synchronized, both files use `_unsynced` names. On synchronization, logging transitions to the UTC-day files.
+- At each daily upload, the device POSTs only the previous UTC day's summary, once per day. Wi-Fi is turned off after the attempt; a successful 2xx response is persisted to prevent re-upload.
 
-仓库 Settings → Pages 的 Build and deployment Source 需要设为 **GitHub Actions**。工作流在每次仪表盘或索引更新时自动构建部署。
+The RAW record layout and decoding rules are specified in [the data format guide](docs/dashboard-data-format.md). Firmware should retain raw integer counts without averaging or scaling; conversion belongs in SUMMARY generation and the dashboard display.
 
-## 本地上传验证
+## Dashboard and publication
 
-需要 Python 3.10+。在仓库根目录运行：
+The dashboard in `dashboard/` reads `data/index.json` and displays indexed daily summaries with downloadable summary files and RAW file metadata/links where present. GitHub Pages deploys on pushes to `main`. Publicly indexed data, file contents, and commit history are accessible to anyone; do not publish sensitive locations or credentials. The upload API currently stores verified uploads locally for development and does not write to GitHub.
+
+## Local upload API development
+
+Requires Python 3.10+. From the repository root:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r backend/requirements.txt
-python scripts/make_test_file.py
 $env:DEVICE_API_KEY = 'dev-test-key'
 uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
-另开一个 PowerShell 窗口，运行：
-
-```powershell
-.\scripts\verify_local_upload.ps1
-```
-
-预期响应：`status=success`、`size_bytes=5242880`、SHA-256 与生成脚本输出一致。重复发送相同文件具有幂等性；同名不同内容返回 HTTP 409。测试数据位于 `data/samples/` 并被 Git 忽略；接收文件位于 `data/uploads/` 并被 Git 忽略。
-
-开发默认 API Key 仅用于本机测试。正式部署必须设置 `DEVICE_API_KEY`，并启用 HTTPS。`storage=local-test` 明确表示当前未写入 GitHub。
-
-仪表盘索引和支持的原始波形格式见 [docs/dashboard-data-format.md](docs/dashboard-data-format.md)。CoreS3 的实际二进制编码尚未确定；接入真机数据前需让固件、API 元数据与仪表盘解码格式一致。
+The API endpoint is `POST /api/v1/upload`; set `DEVICE_API_KEY` to a deployment secret and use HTTPS in production. The dashboard data index schema and sample format are in [docs/dashboard-data-format.md](docs/dashboard-data-format.md).
