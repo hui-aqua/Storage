@@ -1,0 +1,7 @@
+__pycache__/
+.venv/
+.python/
+.uv-cache/
+.env
+data/uploads/
+data/samples/*.bin
