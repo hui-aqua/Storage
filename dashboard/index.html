@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Marine Motion · Data Viewer</title><link rel="stylesheet" href="style.css"><script src="decoder.js" defer></script><script src="app.js" defer></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Marine Motion · Data Viewer</title><link rel="stylesheet" href="style.css"><script src="decoder.js?v=20261111-csv-time" defer></script><script src="app.js?v=20261111-csv-time" defer></script></head>
 <body><main id="workspace">
 <header><a class="brand" href="./">≋ <strong>Marine Motion</strong><span>Data Viewer</span></a><label>Theme <select id="theme"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></label></header>
 <section class="source-bar" aria-label="Data source"><input id="local-file" type="file" accept=".bin,.csv" hidden><button id="open-file" class="primary">Open file</button><button id="cloud-toggle" aria-expanded="false" aria-controls="cloud-panel">Cloud data ▾</button><span id="measurement">Open a recording to begin</span><a id="original" class="button disabled" aria-disabled="true" download>Download original</a><button id="export-csv" disabled>Export CSV</button></section>

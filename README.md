@@ -65,7 +65,7 @@ Large binary files retain at most 12,000 regularly sampled records for plotting.
 ## Save data and change appearance
 
 - **Download original** preserves the opened file. Cloud downloads request it again from the service.
-- **Export CSV** exports every complete binary record, including header metadata and RAW integer counts, regardless of zoom or plot sampling. The `.decoded.csv` is for analysis and cannot currently be reopened by this viewer's CSV loader.
+- **Export CSV** exports every complete binary record, including header metadata and RAW integer counts, regardless of zoom or plot sampling. SUMMARY exports append `record_time_local`, formatted using the Time Zone selection at export time, with milliseconds, UTC offset and IANA zone. Invalid UTC produces an empty cell. V3 times label exclusive window ends. The `.decoded.csv` is for analysis and cannot currently be reopened by this viewer's CSV loader.
 - **File information** shows device, creation time, size, CRC32, explicit format version, frequency/source, timestamp semantics and durations. For v3, recorded windows total is count / 1 Hz; first-window-start to last-end coverage includes omitted intervals. Endpoint span excludes the first window. For example, three windows ending at 1, 2 and 5 seconds represent 3 seconds of data across 5 seconds of coverage, with a 4-second endpoint span. Local v3 files expose this without cloud metadata; local legacy nominal duration remains unknown. Published links remain available where supplied.
 - **Light / Dark / System** changes the viewer and chart. The choice is saved in this browser; the initial mode is Light.
 
@@ -73,7 +73,7 @@ Large binary files retain at most 12,000 regularly sampled records for plotting.
 
 | Symptom | What to check |
 |---|---|
-| File cannot open | Expand **Advanced & diagnostics**. Check it is a CoreS3 recording, not the arbitrary upload test payload. |
+| File cannot open | Expand **Advanced & diagnostics**. Check the file has a valid CoreS3 RAW or SUMMARY header. |
 | Incomplete final record warning | Complete records remain viewable. Preserve the original; the viewer does not repair it. |
 | Cloud unavailable | Check connectivity and **Refresh**. Local loading remains available. |
 | No cloud recordings | Confirm the selected device. Local viewing is unaffected. |

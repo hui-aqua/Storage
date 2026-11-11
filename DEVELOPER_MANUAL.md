@@ -46,8 +46,8 @@ flowchart LR
 | `wrangler.jsonc` | Worker entry point and R2 binding |
 | `.github/workflows/pages.yml` | Static staging and Pages deployment |
 | `scripts/test_viewer.cjs` | Node VM harness with generated binary fixtures, including 1/10 Hz SUMMARY |
-| `scripts/make_test_file.py` | Deterministic arbitrary 5 MiB upload payload |
-| `scripts/verify_local_upload.ps1` | Upload smoke request to port 8787 |
+| `scripts/test_summary_workflow.cjs` | SUMMARY upload/read regression checks with in-memory R2 |
+| `scripts/test_local_summary.py` | FastAPI SUMMARY checks with temporary storage |
 
 R2 is private, but Worker read endpoints require no authentication. CORS restricts browser origins, not other clients. No upload key belongs in frontend code. Uploads do not write measurement files or index entries to GitHub.
 
@@ -80,7 +80,7 @@ $env:DEVICE_API_KEY = 'dev-test-key'
 uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8787
 ```
 
-Port 8787 matches the smoke script; use 8000 for the viewer. FastAPI has no cloud list/content routes or viewer CORS. Environment variables are read at import; restart after changes.
+Use port 8000 for the viewer. FastAPI has no cloud list/content routes or viewer CORS. Environment variables are read at import; restart after changes.
 
 ### Worker
 
@@ -140,7 +140,7 @@ Both backends accept authenticated multipart POST /api/v1/upload with Authorizat
 
 RAW magic is rejected. V3 requires summary_hz=1 and header time_basis=1 plus at least one complete record. Upload metadata must agree with the header. Header-only files remain locally decodable for every version; legacy header-only upload behavior is retained, while v3 header-only uploads return 422. Partial tails are rejected for upload but reported/displayed locally. A partial-day file containing one or more completed windows is valid; no full-day record count is required. Version is never inferred from size, suffix or content cadence.
 
-The legacy acceleration/binary upload route with sampling_frequency=50 remains for the existing arbitrary-payload smoke test. It keeps filename/SHA-256 behavior; it is not the SUMMARY snapshot route. This legacy rule is unrelated to RAW/SUMMARY acquisition rates. Do not use it for new SUMMARY uploads.
+The legacy acceleration/binary upload route with sampling_frequency=50 retains filename/SHA-256 behavior for existing clients. Current SUMMARY uploads use the snapshot contract above.
 
 CRC is CRC-32/ISO-HDLC (IEEE): reflected polynomial 0xedb88320, initial/final XOR 0xffffffff, over every file byte including header. Python zlib.crc32 produces the same value. SHA-256 is independently retained for content-integrity collision checks. CRC32 is not cryptographic authentication.
 
@@ -307,4 +307,4 @@ The supplied file must be compatible SUMMARY without a partial tail. Private dat
 
 Keep user actions in README, architecture/configuration here, byte offsets in the format reference and acceptance procedures in focused guides. Update relevant documents and links with behavior changes. Review both upload implementations, decoder, UI and Pages staging rather than copying firmware assumptions.
 
-No legacy requirements document exists in this checkout, so no file could be renamed. This manual is the technical entry point. Use repository-relative links and check them after moves. Do not present one-off field measurements as universal rate guarantees.
+Use repository-relative links and check them after moves. Do not present one-off field measurements as universal rate guarantees.

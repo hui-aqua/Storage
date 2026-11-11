@@ -15,6 +15,28 @@ for(const kind of ['raw','summary'])for(const version of [1,2]){
  assert.match(lines[0],kind==='raw'?/axCounts/:/sensorTimeUs/);
  assert.match(lines.at(-1),/"24000"/);
 }
+// Human-readable SUMMARY times follow the export-time selection, including DST offsets.
+const timedSummary=fixture('summary',2,3),timedView=new DataView(timedSummary);
+timedView.setBigUint64(75,BigInt(Date.parse('2026-10-25T00:30:00.123Z')),true);
+timedView.setBigUint64(165,BigInt(Date.parse('2026-10-25T01:30:00.123Z')),true);
+timedView.setUint16(255+88,0,true);
+const osloCsv=ctx.binaryCsv(timedSummary,{timeZone:'Europe/Oslo'});
+assert.match(osloCsv,/"record_time_local"/);
+assert.match(osloCsv,/2026-10-25 02:30:00.123 UTC\+02:00 \[Europe\/Oslo\]/);
+assert.match(osloCsv,/2026-10-25 02:30:00.123 UTC\+01:00 \[Europe\/Oslo\]/);
+assert.ok(osloCsv.trim().split('\r\n')[3].endsWith(',""'));
+assert.match(ctx.binaryCsv(timedSummary,{timeZone:'UTC'}),/2026-10-25 00:30:00.123 UTC(?:\+00:00)? \[UTC\]/);
+assert.doesNotMatch(ctx.binaryCsv(fixture('raw',2),{timeZone:'Europe/Oslo'}),/record_time_local/);
+let downloadedBlob;
+ctx.Blob=Blob;ctx.setTimeout=noop;
+TestURL.createObjectURL=blob=>{downloadedBlob=blob;return 'blob:test';};
+await ctx.openLocal({name:'times.bin',size:timedSummary.byteLength,arrayBuffer:async()=>timedSummary});
+for(const zone of ['Europe/Oslo','UTC','browser']){
+ el('#timezone').value=zone;el('#timezone').onchange();el('#export-csv').onclick();
+ const exported=await downloadedBlob.text();
+ const expected=vm.runInContext('displayTimeZone',ctx);
+ assert.equal(exported,ctx.binaryCsv(timedSummary,{timeZone:expected}));
+}
 await ctx.openLocal({name:'span.bin',size:1,arrayBuffer:async()=>fixture('summary',2)});
 ctx.setRange(0,1);const fullSpan=el('#range-label').textContent;
 assert.match(fullSpan,/Visible span: 9.900 s/);

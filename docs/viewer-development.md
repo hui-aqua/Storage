@@ -20,7 +20,7 @@ Optional field regression runs if data/samples/CS3_01_SUMMARY_20261111.bin exist
 node scripts/test_viewer.cjs path/to/example.bin
 ```
 
-This check requires SUMMARY with no incomplete tail and compares retained motion, temperature and battery values with original bytes. Measurement data is not required in a checkout. The arbitrary test-5mb.bin upload fixture is not a recording.
+This check requires SUMMARY with no incomplete tail and compares retained motion, temperature and battery values with original bytes. Measurement data is not required in a checkout.
 
 ## Browser acceptance checklist
 

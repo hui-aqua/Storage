@@ -141,9 +141,22 @@
     const d=decodeBinary(buffer,{...options,allRecords:true});
     const metadata={...d.header,completeRecords:d.recordCount,trailingBytes:d.tailBytes};
     const fields=d.points.length?Object.keys(d.points[0]):[];
+    const timeZone = d.kind === 'summary' ? options.timeZone : null;
+    const timeFormatter = timeZone ? new Intl.DateTimeFormat('en-GB', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      fractionalSecondDigits: 3, hourCycle: 'h23', timeZoneName: 'longOffset'
+    }) : null;
+    function recordTime(point) {
+      const timestamp = Number(point.t);
+      if (!point.timeValid || timestamp <= 0 || !Number.isFinite(new Date(timestamp).getTime())) return '';
+      const p = Object.fromEntries(timeFormatter.formatToParts(new Date(timestamp)).map(part => [part.type, part.value]));
+      return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}.${p.fractionalSecond} ${p.timeZoneName.replace('GMT', 'UTC')} [${timeZone}]`;
+    }
     const escape=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-    const lines=[[...Object.keys(metadata).map(k=>'header_'+k),'record_index',...fields].map(escape).join(',')];
-    d.points.forEach((p,i)=>lines.push([...Object.values(metadata),i,...fields.map(k=>p[k])].map(escape).join(',')));
+    const timeColumns = timeFormatter ? ['record_time_local'] : [];
+    const lines=[[...Object.keys(metadata).map(k=>'header_'+k),'record_index',...fields,...timeColumns].map(escape).join(',')];
+    d.points.forEach((p,i)=>lines.push([...Object.values(metadata),i,...fields.map(k=>p[k]),...(timeFormatter ? [recordTime(p)] : [])].map(escape).join(',')));
     return lines.join('\r\n')+'\r\n';
   }
   const crcTable = Uint32Array.from({ length: 256 }, (_, value) => {
