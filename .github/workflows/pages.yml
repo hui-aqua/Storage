@@ -34,7 +34,7 @@ jobs:
       - name: Stage dashboard and public index
         run: |
           mkdir -p _site/data
-          cp dashboard/index.html dashboard/app.js dashboard/style.css _site/
+          cp dashboard/index.html dashboard/app.js dashboard/decoder.js dashboard/style.css _site/
           cp data/index.json _site/data/index.json
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

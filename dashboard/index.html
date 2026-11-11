@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#07121c">
   <title>Marine Motion - Data Console</title>
   <link rel="stylesheet" href="style.css">
+  <script src="decoder.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -26,6 +27,37 @@
         <div class="hero-stamp"><span class="stamp-orbit">◉</span><span>CORE S3<br>LOGGER</span></div>
       </section>
 
+      <section class="panel binary-panel" aria-labelledby="binary-heading">
+        <div class="panel-heading"><div><div class="section-kicker">DATA SOURCE / RAW FILE</div><h2 id="binary-heading">Load a RAW file</h2></div><span class="count-pill">R2 · LOCAL</span></div>
+        <div class="mode-tabs" role="tablist" aria-label="Binary file source">
+          <button type="button" class="mode-tab active" id="cloud-tab" role="tab" aria-selected="true" aria-controls="cloud-mode">Cloud Data</button>
+          <button type="button" class="mode-tab" id="local-tab" role="tab" aria-selected="false" aria-controls="local-mode">Local File</button>
+        </div>
+        <div id="cloud-mode" class="binary-controls" role="tabpanel" aria-labelledby="cloud-tab">
+          <label class="field-label" for="cloud-device">DEVICE</label>
+          <select id="cloud-device"><option>CS01</option><option>CS02</option><option>CS03</option><option>CS04</option></select>
+          <label class="field-label" for="cloud-file">DATE / FILE</label>
+          <select id="cloud-file" disabled><option>Loading files…</option></select>
+          <button type="button" class="action-button" id="load-cloud" disabled>Load Data</button>
+          <a id="cloud-download" class="download-button disabled" href="#" aria-disabled="true"><span>↓</span> Download Original</a>
+          <span class="source-hint" id="cloud-status" role="status">Connect to private R2 through the Worker.</span>
+        </div>
+        <div id="local-mode" class="binary-controls" role="tabpanel" aria-labelledby="local-tab" hidden>
+          <input id="local-file" type="file" accept=".bin,application/octet-stream" hidden>
+          <button type="button" class="action-button" id="browse-local">Browse File</button>
+          <div id="drop-zone" class="drop-zone" tabindex="0" role="button" aria-label="Choose a .bin file or drag it here">Drop a .bin file here, or click to browse</div>
+          <button type="button" class="action-button" id="load-local" disabled>Load Data</button>
+          <span class="source-hint" id="local-status" role="status">Local files stay in this browser and are never uploaded.</span>
+        </div>
+        <div class="binary-details" aria-live="polite">
+          <div><span>SOURCE</span><strong id="binary-source">—</strong></div>
+          <div><span>FILENAME</span><strong id="binary-filename">—</strong></div>
+          <div><span>SIZE</span><strong id="binary-size">—</strong></div>
+          <div><span>DEVICE / DATE</span><strong id="binary-context">—</strong></div>
+          <div class="decode-detail"><span>DECODE STATUS</span><strong id="decode-status">Waiting for a file</strong></div>
+        </div>
+      </section>
+
       <section class="metrics" aria-label="Data overview">
         <article class="metric"><span class="metric-label">MEASUREMENTS</span><strong id="metric-count">—</strong><span class="metric-note">published records</span></article>
         <article class="metric"><span class="metric-label">DATA VOLUME</span><strong id="metric-volume">—</strong><span class="metric-note">indexed raw files</span></article>
@@ -42,7 +74,7 @@
         </aside>
 
         <section class="panel chart-panel" aria-label="Acceleration chart">
-          <div class="panel-heading chart-heading"><div><div class="section-kicker">02 / DAILY SUMMARY</div><h2 id="chart-title">Select a day</h2></div><div class="download-actions"><a id="download-link" class="download-button disabled" href="#" aria-disabled="true" download><span>↓</span> Summary CSV</a><a id="raw-download-link" class="download-button raw-button disabled" href="#" aria-disabled="true" download><span>↓</span> RAW file</a></div></div>
+          <div class="panel-heading chart-heading"><div><div class="section-kicker" id="chart-section-kicker">02 / DAILY SUMMARY</div><h2 id="chart-title">Select a day</h2></div><div class="download-actions"><a id="download-link" class="download-button disabled" href="#" aria-disabled="true" download><span>↓</span> Summary CSV</a><a id="raw-download-link" class="download-button raw-button disabled" href="#" aria-disabled="true" download><span>↓</span> RAW file</a></div></div>
           <div class="chart-subhead"><span id="chart-subtitle">Acceleration means · UTC day · 10 Hz</span><span id="chart-range">—</span></div>
           <div class="series-controls" id="series-controls" hidden><button type="button" data-series="acc" class="active">Acceleration · g</button><button type="button" data-series="gyro">Gyroscope · °/s</button></div>
           <div class="plot-wrap" id="plot-wrap"><canvas id="chart" aria-label="X, Y and Z acceleration time series"></canvas><div class="plot-empty" id="plot-empty"><span class="plot-icon">⌁</span><strong>No measurement selected</strong><span>Choose a record from the library to view its waveform.</span></div></div>
@@ -55,7 +87,7 @@
         <div class="panel-heading"><div><div class="section-kicker">03 / INGESTION</div><h2>Upload history</h2></div><span class="history-caption">Newest first <span>↘</span></span></div>
         <div class="table-scroll"><table><thead><tr><th>STATUS</th><th>DEVICE</th><th>DAY (UTC)</th><th>SUMMARY CSV</th><th>SIZE</th><th>CHECKSUM</th><th></th></tr></thead><tbody id="history-body"><tr><td class="table-empty" colspan="7">Daily summary records will appear here when the data index is populated.</td></tr></tbody></table></div>
       </section>
-      <footer><span>PELAGIC / MOTION DATA CONSOLE</span><span>PUBLIC DATASET · SOURCE FILES ARE PUBLICLY ACCESSIBLE</span></footer>
+      <footer><span>PELAGIC / MOTION DATA CONSOLE</span><span>PUBLIC SUMMARIES · RAW FILES VIA PRIVATE R2 WORKER</span></footer>
     </main>
   </div>
 </body>

@@ -5,3 +5,7 @@ __pycache__/
 .env
 data/uploads/
 data/samples/*.bin
+node_modules/
+.wrangler/
+.dev.vars
+worker-configuration.d.ts

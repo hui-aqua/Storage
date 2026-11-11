@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$base = 'http://127.0.0.1:8000'
+$base = 'http://127.0.0.1:8787'
 $headers = @{ Authorization = 'Bearer dev-test-key' }
 [void][Reflection.Assembly]::LoadWithPartialName('System.Net.Http')
 $file = Resolve-Path 'data/samples/test-5mb.bin'

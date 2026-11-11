@@ -1,6 +1,6 @@
 # CoreS3 daily motion data format
 
-Each configured device ID owns `/motion/` on its SD card. Daily names are `{device_id}_RAW_YYYYMMDD.bin` and `{device_id}_SUMMARY_YYYYMMDD.csv`, where the date is UTC. Before the system clock is valid, the names end in `_unsynced`. RAW files are retained on the SD card permanently; the uploader sends only the previous UTC day's SUMMARY once per day and never uploads or deletes RAW. After the upload attempt Wi-Fi is turned off. A successful HTTP 2xx response is recorded so the same day is not uploaded again.
+Each configured device ID owns `/motion/` on its SD card. Daily names are `{device_id}_RAW_YYYYMMDD.bin` and `{device_id}_SUMMARY_YYYYMMDD.csv`, where the date is UTC. Before the system clock is valid, the names end in `_unsynced`. The existing CoreS3 HTTPS upload contract sends `.bin` files to `POST /api/v1/upload`; the Worker stores them in private R2. RAW binaries must not be placed in GitHub or the Pages artifact. After the upload attempt Wi-Fi is turned off. A successful HTTP 2xx response is recorded so the same file is not uploaded again.
 
 ## RAW binary
 
@@ -31,9 +31,9 @@ UTC_time,sensor_time_us,record_id,sample_count,acc_x_mean,acc_y_mean,acc_z_mean,
 
 One row represents each ten decoded RAW samples (nominal 10 Hz). Means are signed per-axis averages in g and °/s. Axis peaks and acceleration/gyro magnitude peaks are absolute maxima across the interval. `sensor_time_us` identifies the last raw sample in the interval. UTC time is ISO 8601 UTC; saturation fields are booleans; `missed_samples` counts skipped/overflowed samples attributed to the interval.
 
-## Public dashboard index
+## Public dashboard index and private RAW storage
 
-GitHub Pages reads `data/index.json`; paths are repository-root-relative and resolve to public raw GitHub URLs. Example:
+GitHub Pages reads `data/index.json`; summary CSV paths are repository-root-relative and resolve to public raw GitHub URLs. Do not add measurement `.bin` files to Git or the Pages artifact. RAW files are stored in a private R2 bucket and the viewer accesses them only through the Worker read API. Example summary record:
 
 ```json
 {
@@ -43,8 +43,6 @@ GitHub Pages reads `data/index.json`; paths are repository-root-relative and res
     "timestamp": "2026-11-09T23:59:59Z",
     "filename": "CS3_01_SUMMARY_20261109.csv",
     "path": "data/CS3_01/2026/11/09/CS3_01_SUMMARY_20261109.csv",
-    "raw_filename": "CS3_01_RAW_20261109.bin",
-    "raw_path": "data/CS3_01/2026/11/09/CS3_01_RAW_20261109.bin",
     "sampling_frequency": 100,
     "summary_frequency": 10,
     "record_size_bytes": 22,
@@ -54,4 +52,4 @@ GitHub Pages reads `data/index.json`; paths are repository-root-relative and res
 }
 ```
 
-Only SUMMARY is eligible for device daily upload. A public RAW path may be added to the index by a separate, explicitly configured publication process; the on-device daily uploader must not send RAW. The dashboard supports CSV SUMMARY files and the `bmi270_raw_v1` record format when an externally published RAW file has a documented header length (`header_bytes`). CSV RAW samples are not supported.
+The CoreS3 upload endpoint accepts the existing upload contract and stores uploads in R2. Viewer reads use `GET /api/v1/files?device=CS01` and `GET /api/v1/files/content?key=CS01/YYYY/MM/DD/file.bin`; the R2 bucket stays private. The dashboard currently confirms that a selected RAW file loads into an `ArrayBuffer`; binary decoding remains TODO until the exact CoreS3 header encoding and byte layout are available. CSV SUMMARY rendering remains independent of this binary pipeline.
