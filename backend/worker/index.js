@@ -1,6 +1,8 @@
+import "../../dashboard/decoder.js";
+
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
-const READ_DEVICES = new Set(["CS01", "CS02", "CS03", "CS04"]);
+const READ_DEVICES = new Set(["CS01", "CS02", "CS03", "CS04", "CS3_01", "CS3_02", "CS3_03", "CS3_04"]);
 const ALLOWED_ORIGINS = new Set([
   "https://hui-aqua.github.io",
   "http://localhost:8000",
@@ -37,7 +39,7 @@ function withReadCors(request, response) {
 }
 
 function validR2Key(key) {
-  const match = /^(CS0[1-4])\/(\d{4})\/(\d{2})\/(\d{2})\/([A-Za-z0-9][A-Za-z0-9._-]*\.bin)$/.exec(key);
+  const match = /^(CS0[1-4]|CS3_0[1-4])\/(\d{4})\/(\d{2})\/(\d{2})\/([A-Za-z0-9][A-Za-z0-9._-]*\.bin)$/.exec(key);
   if (!match || !READ_DEVICES.has(match[1])) return false;
   const [, , year, month, day] = match;
   const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
@@ -48,22 +50,27 @@ function validR2Key(key) {
 
 async function listFiles(request, env, url) {
   const device = url.searchParams.get("device");
-  if (!READ_DEVICES.has(device)) return withReadCors(request, error("device must be CS01, CS02, CS03, or CS04", 400));
+  if (!READ_DEVICES.has(device)) return withReadCors(request, error("Unsupported device", 400));
   if (!env.UPLOADS) return withReadCors(request, error("Upload storage is not configured", 503));
 
   const files = [];
   let cursor;
   do {
-    const page = await env.UPLOADS.list({ prefix: `${device}/`, cursor, limit: 1000 });
+    const page = await env.UPLOADS.list({ prefix: `${device}/`, cursor, limit: 1000, include: ["customMetadata"] });
     for (const object of page.objects) {
       if (!object.key.toLowerCase().endsWith(".bin") || !validR2Key(object.key)) continue;
-      const [, , year, month, day, filename] = object.key.split("/");
-      files.push({ key: object.key, device_id: device, date: `${year}-${month}-${day}`, filename, size_bytes: object.size, uploaded: object.uploaded?.toISOString?.() ?? null });
+      const [, year, month, day, filename] = object.key.split("/");
+      const metadata = object.customMetadata ?? {};
+      const summaryHz = Number(metadata.summary_hz ?? (metadata.measurement_type === "motion_summary" ? metadata.sampling_frequency : NaN));
+      files.push({ ...metadata, key: object.key, device_id: device, date: `${year}-${month}-${day}`, filename, size_bytes: object.size, summary_hz: [1, 10].includes(summaryHz) ? summaryHz : null, record_count: metadata.record_count != null ? Number(metadata.record_count) : null, uploaded: object.uploaded?.toISOString?.() ?? null });
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
 
-  files.sort((a, b) => b.date.localeCompare(a.date) || a.filename.localeCompare(b.filename));
+  // Most complete snapshot first per day, newest upload breaks ties. Keep all versions.
+  files.sort((a, b) => b.date.localeCompare(a.date) || b.size_bytes - a.size_bytes || String(b.uploaded).localeCompare(String(a.uploaded)) || a.key.localeCompare(b.key));
+  const dates = new Set();
+  for (const file of files) { file.preferred = !dates.has(file.date); dates.add(file.date); }
   return withReadCors(request, json({ device, files }));
 }
 
@@ -133,14 +140,15 @@ export default {
     const samplingFrequency = form.get("sampling_frequency");
     const measurementType = form.get("measurement_type");
     const fileFormat = form.get("file_format");
+    const isSummary = measurementType === "motion_summary";
 
     if (!(file instanceof File) || typeof deviceId !== "string" || typeof timestamp !== "string"
-      || typeof samplingFrequency !== "string" || typeof measurementType !== "string"
+      || (!isSummary && typeof samplingFrequency !== "string") || typeof measurementType !== "string"
       || typeof fileFormat !== "string") {
       return error("Missing or invalid upload fields", 422);
     }
     if (!SAFE_ID.test(deviceId)) return error("Invalid device_id", 422);
-    if (samplingFrequency !== "50" || measurementType !== "acceleration" || fileFormat !== "binary") {
+    if (!isSummary && (samplingFrequency !== "50" || measurementType !== "acceleration" || fileFormat !== "binary")) {
       return error("Unexpected measurement metadata", 422);
     }
     if (!validTimestamp(timestamp)) return error("timestamp must be ISO-8601 with timezone", 422);
@@ -154,10 +162,38 @@ export default {
     const filename = originalName.split(/[\\/]/).pop();
     const captured = new Date(timestamp);
     const datePath = captured.toISOString().slice(0, 10).replaceAll("-", "/");
-    const key = `${deviceId}/${datePath}/${filename}`;
+    let key = `${deviceId}/${datePath}/${filename}`;
     const bytes = await file.arrayBuffer();
+    // RAW remains on the SD card; retain the legacy arbitrary-payload test route.
+    if (new TextDecoder().decode(new Uint8Array(bytes, 0, Math.min(8, bytes.byteLength))) === "CS3RAW01") return error("RAW uploads are not supported", 422);
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+    if (isSummary) {
+      const hzText = form.get("summary_hz") ?? samplingFrequency;
+      const hz = Number(hzText);
+      const date = form.get("date");
+      const crc = globalThis.motionCrc32(bytes);
+      if (!READ_DEVICES.has(deviceId) || ![1, 10].includes(hz) || !["cs3_summary_v1", "cs3_summary_v2", "cs3_summary_v3"].includes(fileFormat)) return error("Invalid SUMMARY metadata", 422);
+      if (samplingFrequency != null && Number(samplingFrequency) !== hz) return error("Conflicting SUMMARY frequencies", 422);
+      if (typeof date !== "string" || date !== captured.toISOString().slice(0, 10)) return error("date must match timestamp UTC date", 422);
+      if (typeof form.get("crc32") !== "string" || !/^[a-f0-9]{8}$/i.test(form.get("crc32")) || form.get("crc32").toLowerCase() !== crc) return error("CRC32 mismatch or invalid CRC32", 422);
+      if (!/^\d+$/.test(form.get("size_bytes") ?? "") || Number(form.get("size_bytes")) !== bytes.byteLength) return error("size_bytes mismatch", 422);
+      let decoded;
+      try { decoded = globalThis.decodeBinary(bytes, { summaryHz: hz }); }
+      catch (err) { return error(err.message, 422); }
+      if (decoded.kind !== "summary" || decoded.tailBytes || decoded.header.device !== deviceId || fileFormat !== `cs3_summary_v${decoded.header.version}`) return error("SUMMARY header, device, format or record alignment mismatch", 422);
+      if (decoded.header.version === 3 && decoded.recordCount === 0) return error("SUMMARY v3 upload requires at least one complete window", 422);
+      key = `${deviceId}/${datePath}/${crc}.bin`;
+      const existing = await env.UPLOADS.get(key);
+      if (existing && (existing.size !== bytes.byteLength || existing.customMetadata?.sha256 !== sha256)) return error("CRC32 identity collision: existing snapshot differs", 409);
+      const metadata = { sha256, crc32: crc, device_id: deviceId, date, timestamp, summary_hz: String(hz), sampling_frequency: String(hz), measurement_type: measurementType, file_format: fileFormat, original_filename: filename, size_bytes: String(bytes.byteLength), record_count: String(decoded.recordCount), represented_duration_seconds: String(decoded.representedDurationSeconds), firmware: decoded.header.firmware, created_utc: decoded.header.createdUtc };
+      metadata.format_version = String(decoded.header.version);
+      metadata.timestamp_semantics = decoded.header.timestampSemantics;
+      if (decoded.header.version === 3) metadata.time_basis = String(decoded.header.timeBasis);
+      if (!existing) await env.UPLOADS.put(key, bytes, { httpMetadata: { contentType: "application/octet-stream" }, customMetadata: metadata });
+      return json({ status: existing ? "ALREADY_EXISTS" : "STORED", result: existing ? "ALREADY_EXISTS" : "STORED", device_id: deviceId, date, filename, size_bytes: bytes.byteLength, crc32: crc, sha256, summary_hz: existing ? Number(existing.customMetadata.summary_hz) : hz, sampling_frequency: hz, file_format: fileFormat, format_version: decoded.header.version, time_basis: decoded.header.timeBasis ?? null, record_count: decoded.recordCount, storage: "r2", path: key });
+    }
 
     const existing = await env.UPLOADS.get(key);
     if (existing) {

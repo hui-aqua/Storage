@@ -1,36 +1,79 @@
-# M5Stack Marine Motion Logger
+﻿# Marine Motion Logger — User Manual
 
-CoreS3 logs motion from a BMI270 IMU to the SD card and presents published daily measurements in a static GitHub Pages dashboard. The data contract is designed for 100 Hz acquisition: permanent 22-byte raw records plus a 10 Hz daily summary CSV. Each device writes under `/motion/` using its configured device ID.
+The Motion Data Viewer plots CoreS3 RAW and SUMMARY binary recordings and exports decoded measurements. Local files stay in your browser and are not uploaded.
 
-## On-device daily files
+For implementation, configuration, deployment and extension guidance, see the [Developer Manual](DEVELOPER_MANUAL.md).
 
-- `CS3_01_RAW_YYYYMMDD.bin`: metadata followed by packed little-endian records containing extended BMI270 sensor time, signed accelerometer and gyroscope counts, and validity/saturation/overflow/time flags. The existing CoreS3 HTTPS upload API stores measurement `.bin` files in private R2; they are not stored in GitHub.
-- `CS3_01_SUMMARY_YYYYMMDD.csv`: one row per ten decoded raw samples, with UTC and sensor time, signed axis means converted to g and °/s, absolute axis and magnitude peaks, temperature, battery voltage, saturation flags, and missed sample count.
-- Before UTC is synchronized, both files use `_unsynced` names. On synchronization, logging transitions to the UTC-day files.
-- The existing CoreS3 upload request remains `POST /api/v1/upload`; the Worker retains its current authentication and metadata contract. Wi-Fi is turned off after the attempt; a successful 2xx response is persisted to prevent re-upload.
+## Recording architecture
 
-The RAW record layout and decoding rules are specified in [the data format guide](docs/dashboard-data-format.md). Firmware should retain raw integer counts without averaging or scaling; conversion belongs in SUMMARY generation and the dashboard display.
+The Motion Logger records **100 Hz RAW** on its SD card only. Approximately one second of those measurements produces one **1 Hz SUMMARY** record. SUMMARY is stored on SD, uploaded over HTTPS as a snapshot, and displayed here. RAW upload is rejected; local RAW viewing remains available.
 
-## Dashboard and publication
+SUMMARY v3 explicitly stores 1 Hz and window-end time semantics in its header, so local and cloud v3 files can both identify their rate. Historical v1/v2 binaries remain readable: they have no header rate and use explicit cloud metadata or show frequency unknown locally. No cadence inference or upsampling is performed.
 
-The dashboard in `dashboard/` is a read-only GitHub Pages viewer for indexed summary CSV files. RAW `.bin` files stay in the private Cloudflare R2 bucket and are listed/downloaded only through the Cloudflare Worker. GitHub Pages deploys on pushes to `main`; do not add measurement `.bin` files to the repository.
+## Open the viewer
 
-## Local upload API development
-
-Requires Python 3.10+. From the repository root:
+Use the deployed GitHub Pages viewer, or run this command from the repository root with Python installed:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r backend/requirements.txt
-$env:DEVICE_API_KEY = 'dev-test-key'
-uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+python -m http.server 8000 --directory dashboard
 ```
 
-The API endpoint is `POST /api/v1/upload`; set `DEVICE_API_KEY` to a deployment secret and use HTTPS in production. The dashboard data index schema and sample format are in [docs/dashboard-data-format.md](docs/dashboard-data-format.md).
+Visit <http://localhost:8000/> in a modern browser with JavaScript enabled. No frontend installation or build is required. This simple server supports local binary viewing; it does not supply the optional published-summary index. Cloud binary recordings are fetched separately over the network.
 
-## Cloudflare Worker upload API
+## Open a recording
 
-The deployable API entry point is `backend/worker/index.js`. It preserves the CoreS3 `POST /api/v1/upload` contract, stores `.bin` uploads in the private `UPLOADS` R2 bucket, and serves the viewer through `GET /api/v1/files?device=CS01` and `GET /api/v1/files/content?key=...`. Configure the `marine-motion-uploads` bucket in `wrangler.jsonc`, then set the upload API key with `npx wrangler secret put DEVICE_API_KEY`. Run locally with `npx wrangler dev` or deploy with `npx wrangler deploy`.
+1. Select **Open file** and choose a RAW or SUMMARY `.bin`, or drop it onto the page. Only the first dropped file opens.
+2. Read the filename, device and record counts above the chart.
+3. For remote recordings, expand **Cloud data**, choose device `CS01`–`CS04` and a recording, then select **Open recording**. **Refresh** reloads the list.
 
-The dashboard's Local File mode reads selected files with `File.arrayBuffer()` and does not send them to the Worker. Cloud and local files share `dashboard/decoder.js`; it currently verifies only the `ArrayBuffer` because the exact CoreS3 binary header specification is not documented yet.
+The recording selector defaults to the largest snapshot for the newest date, with upload time breaking equal-size ties. Previous same-day snapshots stay in the selector. Re-uploading unchanged contents is a duplicate; changed contents coexist as another CRC32 snapshot.
+
+RAW v1/v2 and SUMMARY v1/v2/v3 are supported. The new firmware writes `_v3.bin`, but the explicit header version, not the suffix or byte size, determines interpretation. The header determines format; an arbitrary file renamed `.bin` is not a recording.
+
+**Current CSV limitation:** the interface includes CSV selection and **Published summaries**, but CSV loading currently fails because its column definition is missing. Use binary recordings for plotting. Binary-to-CSV export works. The published index in this checkout is empty.
+
+## Explore measurements
+
+Choose a **Signal**: acceleration (g), gyroscope (degrees/s), recorded peaks, temperature (degrees C), battery (mV), missed samples, samples per summary, or saturation. Unavailable signal types are disabled. RAW has no temperature or battery values.
+
+For vector signals, toggle **X**, **Y**, **Z** and **Magnitude**. Acceleration includes gravity. Magnitude calculated from mean axes differs from recorded peak magnitude.
+
+| Action | Control |
+|---|---|
+| Zoom around the pointer | Scroll over the plot |
+| Pan | Drag with **Pan** selected |
+| Zoom to an interval | Shift-drag, or choose **Select range** and drag |
+| Navigate a range | Move **Start** and **End** sliders |
+| Inspect values | Hover over the chart |
+| Restore full recording | **Reset zoom**, double-click, or Home with plot focused |
+| Keyboard navigation | Focus plot; left/right pan, +/− zoom |
+
+The range label shows the span between visible record timestamps. RAW uses relative sensor time. Legacy SUMMARY timestamps are emission times. V3 timestamps mark exclusive ends of completed approximately one-second windows: a record at 12:00:01 describes [12:00:00, 12:00:01). Each nonempty completed interval uses all samples actually collected; sample count can vary. Empty intervals are omitted and unfinished final intervals are discarded on Stop. No data is generated to fill those gaps.
+
+V3 uses valid recorded UTC, or recorded host monotonic window ends if UTC is unusable. If both clocks are discontinuous (for example across reboot appends), the chart uses record order. Legacy files retain their previous metadata-based nominal-time or record-order fallback.
+
+## Statistics and large recordings
+
+Expand **Range statistics** for mean, RMS, minimum, maximum and absolute peak of enabled signals in the visible range. Nonfinite values are skipped.
+
+Large binary files retain at most 12,000 regularly sampled records for plotting. Hover and statistics use these points; zooming does not recover extra detail. Short peaks can be missed. RMS of SUMMARY means is not RMS of original RAW samples. Statistics give each displayed record equal weight; they do not weight by sample count or fill empty windows. V3 timing/gap/loss flags are reported in hover details and decoded CSV. Use full-record export for further analysis.
+
+## Save data and change appearance
+
+- **Download original** preserves the opened file. Cloud downloads request it again from the service.
+- **Export CSV** exports every complete binary record, including header metadata and RAW integer counts, regardless of zoom or plot sampling. The `.decoded.csv` is for analysis and cannot currently be reopened by this viewer's CSV loader.
+- **File information** shows device, creation time, size, CRC32, explicit format version, frequency/source, timestamp semantics and durations. For v3, recorded windows total is count / 1 Hz; first-window-start to last-end coverage includes omitted intervals. Endpoint span excludes the first window. For example, three windows ending at 1, 2 and 5 seconds represent 3 seconds of data across 5 seconds of coverage, with a 4-second endpoint span. Local v3 files expose this without cloud metadata; local legacy nominal duration remains unknown. Published links remain available where supplied.
+- **Light / Dark / System** changes the viewer and chart. The choice is saved in this browser; the initial mode is Light.
+
+## Troubleshooting
+
+| Symptom | What to check |
+|---|---|
+| File cannot open | Expand **Advanced & diagnostics**. Check it is a CoreS3 recording, not the arbitrary upload test payload. |
+| Incomplete final record warning | Complete records remain viewable. Preserve the original; the viewer does not repair it. |
+| Cloud unavailable | Check connectivity and **Refresh**. Local loading remains available. |
+| No cloud recordings | Confirm the selected device. Local viewing is unaffected. |
+| Published summaries unavailable locally | The simple local server serves only the viewer. CSV plotting also has the limitation above. |
+| Missing values or unexpected time axis | Check file metadata and diagnostics. Invalid RAW axes are omitted; clock fallback is explained in diagnostics. |
+
+The viewer's cloud requests are read-only and do not need the device upload API key.

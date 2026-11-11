@@ -1,55 +1,106 @@
-# CoreS3 daily motion data format
+﻿# CoreS3 binary format reference
 
-Each configured device ID owns `/motion/` on its SD card. Daily names are `{device_id}_RAW_YYYYMMDD.bin` and `{device_id}_SUMMARY_YYYYMMDD.csv`, where the date is UTC. Before the system clock is valid, the names end in `_unsynced`. The existing CoreS3 HTTPS upload contract sends `.bin` files to `POST /api/v1/upload`; the Worker stores them in private R2. RAW binaries must not be placed in GitHub or the Pages artifact. After the upload attempt Wi-Fi is turned off. A successful HTTP 2xx response is recorded so the same file is not uploaded again.
+This reference describes what [dashboard/decoder.js](../dashboard/decoder.js) currently reads. Offsets and semantics were verified against the authoritative Motion Logger DATA_FORMAT.md sections 6.4-6.8 and src/storage/RecordFormats.h in the sibling CoreS3_MotionLogger project. Firmware source is outside this checkout. Filenames do not determine version. Fields are packed little-endian; text fields are NUL-terminated/padded and trimmed by the decoder. Records follow the declared header.
 
-## RAW binary
+See the [Developer Manual](../DEVELOPER_MANUAL.md) for decoding APIs and the [User Manual](../README.md) for viewing.
 
-The file begins with a versioned metadata header containing device ID, firmware version, file start UTC, accelerometer range (±8 g), gyroscope range (±1000 °/s), 100 Hz sample rate, and record format version. Header encoding must be documented by the firmware and indexed metadata; records immediately following it are fixed-length 22-byte little-endian values:
+## Layouts and validation
 
-| Offset | Type | Field |
+| Magic | Version | Header bytes | Record bytes |
+|---|---:|---:|---:|
+| CS3RAW01 | 1 | 73 | 22 |
+| CS3RAW01 | 2 | 81 | 22 |
+| CS3SUM01 | 1 | 32 | 90 |
+| CS3SUM01 | 2 | 75 | 90 |
+| CS3SUM01 | 3 | 75 | 90 |
+
+Common fields: magic at offset 0 (8 bytes), uint16 version at 8 and uint16 header size at 10. Unknown magic/version, wrong header/record sizes and truncated headers throw. RAW ranges and rate must be positive. Complete records are read; incomplete tail bytes are reported, not repaired. A header-only recording is accepted.
+
+## RAW header offsets
+
+| Offset | Type | Meaning |
 |---:|---|---|
-| 0 | uint64 | `sensor_time_us` |
-| 8 | int16 | `ax` |
-| 10 | int16 | `ay` |
-| 12 | int16 | `az` |
-| 14 | int16 | `gx` |
-| 16 | int16 | `gy` |
-| 18 | int16 | `gz` |
-| 20 | uint16 | `status` |
+| 12 | text[16] | Device |
+| 28 | text[16] | Firmware |
+| 44 | text[21] | Creation UTC |
+| 65 | int16 | Acceleration full-scale range in g |
+| 67 | int16 | Gyroscope full-scale range in degrees/s |
+| 69 | uint16 | Configured sample rate |
+| 71 | uint16 | Record size, must be 22 |
+| 73 | uint8, v2 only | Header time-valid |
+| 77 | uint32, v2 only | Dropped samples |
 
-`sensor_time_us` extends the BMI270 24-bit SensorTime counter over wraps. For samples in a FIFO burst, earlier timestamps are reconstructed at 10 ms intervals relative to the SensorTime frame at the burst end. Signed counts are stored unchanged; do not average or scale RAW values.
+Bytes 74–76 are not interpreted. For v1, time-valid and dropped-sample header metadata are null.
 
-Status bits: bit 0 acceleration valid; bit 1 gyro valid; bit 2 accelerometer saturation; bit 3 gyro saturation; bit 4 FIFO overflow/skip observed; bit 5 system time valid. Higher bits are reserved and zero.
+## RAW record offsets
 
-## SUMMARY CSV
+| Offset | Type | Meaning |
+|---:|---|---|
+| 0 | uint64 | Sensor time in microseconds |
+| 8, 10, 12 | int16 each | Acceleration X/Y/Z counts |
+| 14, 16, 18 | int16 each | Gyroscope X/Y/Z counts |
+| 20 | uint16 | Status |
 
-UTF-8 CSV columns, in this exact order:
+Acceleration = counts × header range / 32768 g. Gyroscope = counts × header range / 32768 degrees/s. Counts are retained even if invalid; engineering axes become null when their validity bit is clear.
 
-```text
-UTC_time,sensor_time_us,record_id,sample_count,acc_x_mean,acc_y_mean,acc_z_mean,acc_x_peak,acc_y_peak,acc_z_peak,acc_mag_peak,gyro_x_mean,gyro_y_mean,gyro_z_mean,gyro_x_peak,gyro_y_peak,gyro_z_peak,gyro_mag_peak,temperature,battery_voltage,acc_saturation,gyro_saturation,missed_samples
-```
+| Status bit | Meaning |
+|---:|---|
+| 0 | Acceleration valid |
+| 1 | Gyroscope valid |
+| 2 | Acceleration saturated |
+| 3 | Gyroscope saturated |
+| 4 | Loss detected |
+| 5 | Calendar time valid |
 
-One row represents each ten decoded RAW samples (nominal 10 Hz). Means are signed per-axis averages in g and °/s. Axis peaks and acceleration/gyro magnitude peaks are absolute maxima across the interval. `sensor_time_us` identifies the last raw sample in the interval. UTC time is ISO 8601 UTC; saturation fields are booleans; `missed_samples` counts skipped/overflowed samples attributed to the interval.
+## SUMMARY header offsets
 
-## Public dashboard index and private RAW storage
+Version is uint16 at offset 8, not inferred from byte sizes. V2 and v3 share sizes but have different field and time semantics. `_v3.bin` is a writer naming convention, not parser authority.
 
-GitHub Pages reads `data/index.json`; summary CSV paths are repository-root-relative and resolve to public raw GitHub URLs. Do not add measurement `.bin` files to Git or the Pages artifact. RAW files are stored in a private R2 bucket and the viewer accesses them only through the Worker read API. Example summary record:
+| Offset | Type | Meaning |
+|---:|---|---|
+| 12 | uint16 | Record size, must be 90 |
+| 14 | uint16 | v1/v2 reserved; v3 summary_hz, must be 1 |
+| 16 | text[16] | Device |
+| 32 | text[16], v2/v3 | Firmware |
+| 48 | text[21], v2/v3 | Creation UTC |
+| 69 | uint8, v2/v3 | Header time-valid |
+| 70 | uint8, v2/v3 | v2 reserved; v3 time_basis, must be 1 |
+| 71 | uint32, v2/v3 | Dropped samples |
 
-```json
-{
-  "schema_version": 2,
-  "records": [{
-    "device_id": "CS3_01",
-    "timestamp": "2026-11-09T23:59:59Z",
-    "filename": "CS3_01_SUMMARY_20261109.csv",
-    "path": "data/CS3_01/2026/11/09/CS3_01_SUMMARY_20261109.csv",
-    "sampling_frequency": 100,
-    "summary_frequency": 10,
-    "record_size_bytes": 22,
-    "record_format_version": 1,
-    "summary_rows": 86400
-  }]
-}
-```
+V1 ends at byte 31; firmware/creation UTC are empty and header time-valid/dropped samples are null. V1/v2 reserved fields are not interpreted as frequency or time basis, even if their bytes happen to be 1. Their SUMMARY sampleRate remains null; explicit summaryHz metadata is optional. V3 reads summary_hz=1 at offset 14 and time_basis=1 at offset 70; other values are rejected. V3 header.summaryHz=1 and rateSource="v3 header" are available locally. External rate metadata must agree. No SUMMARY header stores RAW acquisition rate or sensor ranges.
 
-The CoreS3 upload endpoint accepts the existing upload contract and stores uploads in R2. Viewer reads use `GET /api/v1/files?device=CS01` and `GET /api/v1/files/content?key=CS01/YYYY/MM/DD/file.bin`; the R2 bucket stays private. The dashboard currently confirms that a selected RAW file loads into an `ArrayBuffer`; binary decoding remains TODO until the exact CoreS3 header encoding and byte layout are available. CSV SUMMARY rendering remains independent of this binary pipeline.
+## SUMMARY record offsets
+
+| Offset | Type | Meaning and decoded scaling |
+|---:|---|---|
+| 0 | uint64 | v1/v2 emission UTC; v3 exclusive window-end UTC (ms), zero if invalid |
+| 8 | uint64 | v1/v2 mixed sensor/poll emission clock; v3 host monotonic exclusive window end (microseconds since boot) |
+| 16 | uint32 | Record ID |
+| 20 | uint16 | Actual aggregated sample count; v3 uses all samples collected in the window, not a fixed 100 |
+| 22, 26, 30 | int32 each | Acceleration X/Y/Z mean; divide by 1000 to g |
+| 34, 38, 42, 46 | uint32 each | Acceleration X/Y/Z/magnitude peak; divide by 1,000,000 to g |
+| 50, 54, 58 | int32 each | Gyroscope X/Y/Z mean; divide by 1000 to degrees/s |
+| 62, 66, 70, 74 | uint32 each | Gyroscope X/Y/Z/magnitude peak; divide by 1000 to degrees/s |
+| 78 | int16 | Temperature /100 to degrees C; -32768 means unavailable |
+| 80 | uint16 | Battery mV; zero means unavailable; decoder outputs volts, UI converts to mV |
+| 82, 83 | uint8 each | Acceleration/gyroscope saturation, nonzero means true |
+| 84 | uint32 | Missed samples |
+| 88 | uint16 | Status; decoder uses bit 5 for time validity |
+
+SUMMARY axis values are decoded without applying RAW validity-bit masking. V3 exposes status bits 0/1 paired acceleration/gyro validity, 2/3 saturation, 4 FIFO loss, 5 projected UTC valid, 6 timing/membership warning, and 7 gap spanning empty intervals. Bits 8-15 are reserved. V1/v2 only define bit 5 in SUMMARY. V3 window membership is approximate when bit 6 is set; sample-count variation alone is not proof of loss. Temperature and battery are emission-time readings, not window means. Magnitude of mean axes is derived in the UI; it is not the recorded peak magnitude.
+
+## Time, sampling and export
+
+RAW sensor time is relative and does not establish sample UTC. Legacy SUMMARY uses emission UTC and retains metadata-based nominal relative-time or record-order fallback. V3 records label completed half-open windows [utc_ms - 1000, utc_ms), or [sensor_time_us - 1000000, sensor_time_us) on the boot monotonic clock. Windows begin with each recording session, not necessarily on UTC integer seconds. UTC is back-projected at emission and can step/drift; monotonic bounds carry acquisition interval spacing. The viewer uses valid nondecreasing UTC, otherwise valid strictly increasing v3 monotonic ends, otherwise record order. It never compresses v3 gaps into index/Hz time. Record IDs are not global identities or time coordinates.
+
+The default binary plot retains every ceil(recordCount/12000)-th record, with a minimum stride of one. Statistics and hover use these retained points. The complete-record count remains exact; extrema and the last original record may be omitted from the plot. Full CSV export decodes all complete records and includes metadata, record index and point fields. It has a different schema from daily SUMMARY CSV input and is not a viewer round-trip format.
+
+## Sources and CSV limitation
+
+Local selection never uploads files. Cloud binaries are fetched through Worker read routes from private R2; the routes themselves are unauthenticated. The published index is separate metadata for CSV history. Its records array is currently empty. CSV loading currently fails due to undefined SUMMARY_COLUMNS in app.js; no working daily CSV contract is defined by this repository. See the Developer Manual before modifying this path.
+
+## SUMMARY rate metadata and durations
+
+RAW acquisition remains 100 Hz and SD-only. SUMMARY v3 emits each nonempty completed approximately one-second interval once, using every collected sample. Empty intervals are omitted; the unfinished final interval is discarded on Stop, while its RAW samples remain. The viewer does not generate missing intervals or upsample. Gap flags and monotonic discontinuities break plot lines even across subsampling. V1/v2 have no reliable local rate discriminator and retain their historical interpretation.
+
+Timestamp span is last minus first endpoint across all complete original records. V3 representedDurationSeconds = recordCount / header.summaryHz counts completed recorded windows; it excludes omitted intervals. windowCoverageSeconds = endpoint span + one second measures first-window-start to last-end coverage, including gaps (preferring valid monotonic time). For ends at 1, 2 and 5 seconds: 3 recorded seconds, 4-second endpoint span, 5-second coverage. Header-only local v3 files decode with zero records; v3 upload requires at least one complete record and aligned tail. Legacy header-only behavior remains unchanged. Neither sum is a claim of exact hardware sample UTC. CRC covers original bytes including the version/rate fields.
