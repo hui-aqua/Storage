@@ -53,6 +53,41 @@ for(const version of [1,2])for(const hz of [1,10]){
  assert.match(ctx.binaryCsv(buffer,{summaryHz:hz}),/header_summaryHz/);
 }
 const invalid=summaryFixture({count:11,invalidUtc:true});
+// Display-only timezone changes exercise the real local and remote loading paths.
+const timezoneBuffer=summaryFixture({count:4});
+const timezoneView=new DataView(timezoneBuffer);
+const transitionTimes=['2026-03-29T00:59:59Z','2026-03-29T01:00:00Z','2026-10-25T00:59:59Z','2026-10-25T01:00:00Z'].map(Date.parse);
+transitionTimes.forEach((t,i)=>timezoneView.setBigUint64(75+i*90,BigInt(t),true));
+for(const source of ['local','remote']){
+ if(source==='local')await ctx.openLocal({name:'timezone.bin',size:timezoneBuffer.byteLength,arrayBuffer:async()=>timezoneBuffer});
+ else {
+  vm.runInContext("state.cloudFiles=[{key:'timezone',filename:'timezone.bin',summary_hz:1}]",ctx);
+  el('#cloud-file').value='timezone';ctx.fetch=async()=>({ok:true,arrayBuffer:async()=>timezoneBuffer});await ctx.loadCloudFile();
+ }
+ const before=vm.runInContext('JSON.stringify({points:state.points,times:state.times,range:state.range})',ctx);
+ const bytes=Buffer.from(timezoneBuffer).toString('hex');
+ for(const zone of ['UTC','Europe/Oslo','browser','Asia/Shanghai']){
+  el('#timezone').value=zone;el('#timezone').onchange();
+  assert.equal(vm.runInContext('JSON.stringify({points:state.points,times:state.times,range:state.range})',ctx),before);
+  assert.equal(Buffer.from(timezoneBuffer).toString('hex'),bytes);
+  assert.match(ctx.timeLabel(0),/Local:.*\nUTC: 2026-03-29 00:59:59.000 UTC/s);
+  const resolved=zone==='browser'?vm.runInContext('Intl.DateTimeFormat().resolvedOptions().timeZone',ctx):zone;
+  assert.ok(el('#active-timezone').textContent.includes(resolved));
+  if(zone==='UTC')assert.equal(ctx.axisLabel(transitionTimes[0],1000),'00:59:59');
+  if(zone==='Europe/Oslo'){
+   assert.equal(ctx.axisLabel(transitionTimes[0],1000),'01:59:59');
+   assert.equal(ctx.axisLabel(transitionTimes[1],1000),'03:00:00');
+   assert.equal(ctx.axisLabel(transitionTimes[2],1000),'02:59:59');
+   assert.equal(ctx.axisLabel(transitionTimes[3],1000),'02:00:00');
+   assert.match(ctx.displayTimestamp(Date.parse('2026-11-11T12:00:00Z')),/2026-11-11 13:00:00.000 CET/);
+   assert.match(ctx.displayTimestamp(Date.parse('2026-07-11T12:00:00Z')),/2026-07-11 14:00:00.000 CEST/);
+   ctx.setRange(0,.4);assert.match(el('#active-timezone').textContent,/CET, UTC\+1 → CEST, UTC\+2/);ctx.setRange(0,1);
+   el('#chart').events.pointermove({clientX:600});assert.match(el('#tooltip').textContent,/Local:.*\nUTC:/s);
+  }
+ }
+}
+el('#timezone').value='browser';el('#timezone').onchange();
+console.log('PASS: local/cloud timezone switching, browser detection, UTC, Oslo winter/summer and both DST transitions, tooltip and source invariance.');
 await ctx.openLocal({name:'invalid-clock.bin',size:invalid.byteLength,arrayBuffer:async()=>invalid});
 assert.equal(vm.runInContext('state.clock',ctx),'index'); // no local rate inference, even with 1-second sensor intervals
 const nominal=ctx.decodeBinary(invalid,{summaryHz:1});

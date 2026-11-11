@@ -165,6 +165,14 @@ Read paths require an allowed device, valid calendar date and safe lowercase .bi
 
 ## Viewer implementation
 
+### Display timezone
+
+`dashboard/app.js` detects Browser Local using `Intl.DateTimeFormat().resolvedOptions().timeZone`. The `#timezone` selector defaults to Browser Local and also offers `Europe/Oslo` and `UTC`. Add an option whose value is an IANA timezone identifier to extend the list, for example `Asia/Shanghai`.
+
+`displayParts()` caches `Intl.DateTimeFormat` instances per zone. `displayTimestamp()`, `axisLabel()` and `timeLabel()` format UTC instants only at rendering time. Intl determines date-specific DST automatically. `updateTimeZoneLabel()` shows the selected zone and visible endpoint abbreviations/offsets, including both when they differ. Tooltips always include a separate UTC endpoint. V3 local interval bounds are formatted independently across DST changes.
+
+The selector calls `update()` without loading or adopting data. UTC chart coordinates, range calculations, hover lookup, normalized points and source buffers retain their values. Local and remote binary paths share these formatters after `adopt()`. Relative, sensor, monotonic and record-order clocks keep their existing labels. SUMMARY layout, decoder, upload API, storage and CSV export require no timezone conversion.
+
 ### Binary decoder
 
 `decoder.js` exposes `window.decodeBinary(buffer, options = {})` and `window.binaryCsv(buffer, options = {})` and `globalThis.motionCrc32(buffer)`:

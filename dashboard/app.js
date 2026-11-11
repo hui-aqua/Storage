@@ -1,4 +1,4 @@
-﻿const INDEX_URL = new URL("data/index.json", document.baseURI);
+const INDEX_URL = new URL("data/index.json", document.baseURI);
 const REPO_RAW = "https://raw.githubusercontent.com/hui-aqua/Storage/main/";
 const WORKER_URL = "https://marine-motion-storage-api.stavanger.workers.dev";
 const state = { records: [], points: [], series: 'acc', cloudFiles: [], enabled: new Set(['x','y','z']), range: [0,1], times: [] };
@@ -92,15 +92,52 @@ function link(id,url,name=''){const a=$(id);a.href=url||'#';a.download=name;a.cl
 function setOriginal(url,name){if(originalUrl){URL.revokeObjectURL(originalUrl);originalUrl=null;}link('#original',url,name);}
 function entries(){const s=signals[state.series];if(!s.vector)return s.keys.map((key,i)=>({key,label:s.labels?.[i]||s.label,color:colors[i]}));return ['x','y','z','m'].filter(a=>state.enabled.has(a)).map(a=>{const i=['x','y','z','m'].indexOf(a);return {key:s.keys[i]||'magnitude',label:a==='m'?'Magnitude':a.toUpperCase(),color:colors[i]};});}
 function value(p,key){if(key==='magnitude'){const keys=signals[state.series].keys.slice(0,3);return keys.every(k=>Number.isFinite(p[k]))?Math.hypot(...keys.map(k=>p[k])):null;}const v=p[key];return typeof v==='boolean'?Number(v):v;}
+// IANA timezone formatting is presentation-only. Coordinates retain UTC milliseconds.
+const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+let displayTimeZone = browserTimeZone;
+const timeFormatters = new Map();
+function displayParts(t, zone = displayTimeZone) {
+ if (!timeFormatters.has(zone)) timeFormatters.set(zone, new Intl.DateTimeFormat('en-GB', {
+  timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3,
+  hourCycle: 'h23', timeZoneName: 'short'
+ }));
+ return Object.fromEntries(timeFormatters.get(zone).formatToParts(new Date(t)).map(p => [p.type, p.value]));
+}
+function displayTimestamp(t, zone = displayTimeZone) {
+ const p = displayParts(t, zone);
+ return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}.${p.fractionalSecond} ${p.timeZoneName}`;
+}
+function zoneDescription(t) {
+ const name = displayParts(t).timeZoneName;
+ const offset = new Intl.DateTimeFormat('en-GB', {timeZone: displayTimeZone, timeZoneName: 'shortOffset'})
+  .formatToParts(new Date(t)).find(p => p.type === 'timeZoneName').value.replace('GMT', 'UTC');
+ return name === offset ? name : `${name}, ${offset}`;
+}
+function updateTimeZoneLabel() {
+ let text = `Time: ${displayTimeZone}`;
+ if (state.clock === 'utc' && state.points.length) {
+  const [a, b] = bounds();
+  const descriptions = [...new Set([zoneDescription(state.times[a]), zoneDescription(state.times[b])])];
+  if (displayTimeZone !== 'UTC') text += ` (${descriptions.join(' → ')})`;
+ } else if (state.points.length) text += ' | chart uses ' + state.clock + ' time';
+ $('#active-timezone').textContent = text;
+}
+$('#timezone').onchange = () => {
+ displayTimeZone = $('#timezone').value === 'browser' ? browserTimeZone : $('#timezone').value;
+ update();
+};
+updateTimeZoneLabel();
 function timeLabel(index,exact=false){
  if(!state.points.length)return '';
  const point=state.points[index],v3=state.meta?.kind==='summary'&&state.meta.version===3;
- const format=t=>state.clock==='utc'?new Date(t).toISOString().replace('T',' ').replace('Z',' UTC'):(t/1e6).toFixed(exact?6:2)+' s';
+ const format=t=>state.clock==='utc'?displayTimestamp(t):(t/1e6).toFixed(exact?6:2)+' s';
  let label;
  if(state.clock==='index')label='Record '+(index+1)+' | clock unavailable';
- else if(v3)label='['+format(state.times[index]-(state.clock==='utc'?1000:1e6))+', '+format(state.times[index])+') | '+(state.clock==='utc'?'UTC':'host monotonic')+' exclusive window end';
+ else if(v3)label='['+format(state.times[index]-(state.clock==='utc'?1000:1e6))+', '+format(state.times[index])+') | '+(state.clock==='utc'?displayTimeZone:'host monotonic')+' exclusive window end';
  else label=format(state.times[index])+(state.clock==='utc'?'':state.clock==='relative'?' | nominal SUMMARY time':' | sensor');
  if(v3)label+=' | '+point.sampleCount+' samples'+(point.timingWarning?' | timing warning':'')+(point.emptyIntervalGap?' | empty interval gap':'')+(point.loss?' | detected loss':'');
+ if(state.clock==='utc')label='Local: '+label+'\nUTC: '+displayTimestamp(state.times[index], 'UTC');
  return label;
 }
 
@@ -151,7 +188,7 @@ function updateCloudDownload(){const f=selectedCloudFile();link('#cloud-download
 async function loadCloudFile(){const f=selectedCloudFile();if(!f)return;const token=++loadToken;notice('Opening cloud recordingâ€¦');try{const response=await fetch(workerContentUrl(f.key),{mode:'cors',cache:'no-store'});if(!response.ok)throw Error(`Cloud download (${response.status})`);const data=await response.arrayBuffer(),r=decodeBinary(data,{summaryHz:f.summary_hz});if(f.crc32&&motionCrc32(data)!==f.crc32.toLowerCase())throw Error('Snapshot CRC32 does not match listing metadata');if(token!==loadToken)return;adopt(r.points,{filename:f.original_filename||f.filename,snapshotKey:f.key,uploaded:f.uploaded,kind:r.kind,count:r.recordCount,device:r.header.device,date:r.header.createdUtc||f.date,rate:r.header.sampleRate,summaryHz:r.header.summaryHz,rateSource:r.header.rateSource,crc32:f.crc32||motionCrc32(data),timestampSpanSeconds:r.timestampSpanSeconds,timestampsValid:r.timestampsValid,monotonicValid:r.monotonicValid,monotonicSpanSeconds:r.monotonicSpanSeconds,windowCoverageSeconds:r.windowCoverageSeconds,timestampSemantics:r.header.timestampSemantics,headerTimeBasis:r.header.timeBasis,source:'Cloud',bytes:data.byteLength,stride:r.stride,tail:r.tailBytes,version:r.header.version,droppedSamples:r.header.droppedSamples});exportSource=data;$('#export-csv').disabled=false;setOriginal(workerContentUrl(f.key),f.filename);link('#download-link',null);link('#raw-download-link',null);}catch(e){if(token===loadToken)fail('Cloud recording unavailable. Local files can still be opened normally.',e);}}
 $('#export-csv').onclick=()=>{if(exportSource==null)return;try{const csv=typeof exportSource==='string'?exportSource:binaryCsv(exportSource,{summaryHz:state.meta.summaryHz});const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=state.meta.filename.replace(/\.[^.]+$/,'')+'.decoded.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){fail('CSV export failed.',e);}};
 function axisLabel(t,step){
- if(state.clock==='utc'){const iso=new Date(t).toISOString();return iso.slice(11,19)+(step<1000?iso.slice(19,23):'');}
+ if(state.clock==='utc'){const p=displayParts(t);return `${p.hour}:${p.minute}:${p.second}`+(step<1000?'.'+p.fractionalSecond:'');}
  if((state.clock==='sensor'||state.clock==='relative'||state.clock==='monotonic'))return (t/1e6).toFixed(Math.max(0,Math.min(6,Math.ceil(-Math.log10(step/1e6)))))+' s';
  return String(Math.round(t)+1);
 }
@@ -173,7 +210,7 @@ function visibleSpan(a,b){
 function bounds(){const n=state.points.length;return [Math.floor(state.range[0]*Math.max(0,n-1)),Math.ceil(state.range[1]*Math.max(0,n-1))];}
 function setRange(a,b){const min=Math.min(1,2/Math.max(2,state.points.length-1));const width=Math.max(min,Math.min(1,b-a));a=Math.max(0,Math.min(1-width,a));state.range=[a,a+width];hover=null;update();}
 function xFraction(event){const r=$('#chart').getBoundingClientRect();return Math.max(0,Math.min(1,(event.clientX-r.left-64)/(r.width-82)));}
-function update(){const s=signals[state.series];$('#chart-subtitle').textContent=`${s.label} Â· ${s.unit}`;$('#axes').hidden=!s.vector;$('#range-start').value=Math.round(state.range[0]*1000);$('#range-end').value=Math.round(state.range[1]*1000);const [a,b]=bounds();$('#range-label').textContent=state.points.length?`${axisLabel(state.times[a],1)} to ${axisLabel(state.times[b],1)} | ${visibleSpan(a,b)}${state.clock==='utc'?' | UTC':state.clock==='monotonic'?' | recorded host monotonic':state.clock==='relative'?' | nominal SUMMARY time':''}`:'Full recording';drawChart();statistics();}
+function update(){updateTimeZoneLabel();const s=signals[state.series];$('#chart-subtitle').textContent=`${s.label} Â· ${s.unit}`;$('#axes').hidden=!s.vector;$('#range-start').value=Math.round(state.range[0]*1000);$('#range-end').value=Math.round(state.range[1]*1000);const [a,b]=bounds();$('#range-label').textContent=state.points.length?`${axisLabel(state.times[a],1)} to ${axisLabel(state.times[b],1)} | ${visibleSpan(a,b)}${state.clock==='utc'?' | '+displayTimeZone:state.clock==='monotonic'?' | recorded host monotonic':state.clock==='relative'?' | nominal SUMMARY time':''}`:'Full recording';drawChart();statistics();}
 function statistics(){if(!$('#analysis').open)return;if(!state.points.length){$('#stats-note').textContent='Open a recording to calculate statistics.';$('#stats').replaceChildren();return;}const [a,b]=bounds();$('#stats-note').textContent=`Visible range Â· ${b-a+1} displayed records. ${state.meta?.stride>1?'Statistics use evenly sampled plot points, not every original record.':'Statistics describe displayed records.'} RMS of SUMMARY means is not raw-sample RMS. ${state.meta?.version===3?'V3 statistics cover recorded windows only, without sample-count weighting or filled gaps. ':''}Units: ${signals[state.series].unit}.`;$('#stats').replaceChildren();for(const e of entries()){let count=0,sum=0,squares=0,min=Infinity,max=-Infinity;for(let i=a;i<=b;i++){const v=value(state.points[i]||{},e.key);if(!Number.isFinite(v))continue;count++;sum+=v;squares+=v*v;min=Math.min(min,v);max=Math.max(max,v);}const tr=document.createElement('tr');for(const v of [e.label,...(count?[sum/count,Math.sqrt(squares/count),min,max,Math.max(Math.abs(min),Math.abs(max))]:Array(5).fill(null))]){const td=document.createElement('td');td.textContent=typeof v==='number'?v.toFixed(5):v??'â€”';tr.append(td);}$('#stats').append(tr);}}
 function drawChart(){const canvas=$('#chart'),r=canvas.getBoundingClientRect(),dpr=devicePixelRatio||1;canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const w=r.width,h=r.height,L=64,R=w-18,T=18,B=h-34;const css=getComputedStyle(document.documentElement);ctx.font='11px system-ui';const [a,b]=bounds(),es=entries();let min=Infinity,max=-Infinity;for(let i=a;i<=b;i++)for(const e of es){const v=value(state.points[i]||{},e.key);if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v);}}if(!Number.isFinite(min)){min=-1;max=1;}if(min===max){min-=1;max+=1;}const margin=(max-min)*.08;min-=margin;max+=margin;const t0=state.times[a],t1=state.times[b],span=t1-t0;const x=i=>L+(R-L)*(span?(state.times[i]-t0)/span:(i-a)/Math.max(1,b-a));const y=v=>T+(max-v)/(max-min)*(B-T);for(let i=0;i<=4;i++){const yy=T+(B-T)*i/4;ctx.strokeStyle=css.getPropertyValue('--grid');ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(R,yy);ctx.stroke();ctx.fillStyle=css.getPropertyValue('--muted');ctx.textAlign='right';ctx.fillText((max-(max-min)*i/4).toFixed(2),L-9,yy+4);}if(!state.points.length){$('#tooltip').hidden=true;return;}ctx.save();ctx.beginPath();ctx.rect(L,T,R-L,B-T);ctx.clip();for(const e of es){ctx.strokeStyle=e.color;ctx.lineWidth=1.5;ctx.beginPath();let connected=false;for(let i=a;i<=b;i++){const v=value(state.points[i],e.key);if(!Number.isFinite(v)){connected=false;continue;}if(state.meta?.version===3&&state.points[i].gapBefore)connected=false;connected?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v));connected=true;}ctx.stroke();if(state.meta?.kind==='summary'&&state.meta.version===3){ctx.fillStyle=e.color;for(let i=a;i<=b;i++){const v=value(state.points[i],e.key);if(Number.isFinite(v))ctx.fillRect(x(i)-1.5,y(v)-1.5,3,3);}}}if(drag?.select){ctx.fillStyle='#397bd233';const p=L+drag.start*(R-L),q=L+drag.current*(R-L);ctx.fillRect(Math.min(p,q),T,Math.abs(p-q),B-T);}if(hover!=null){ctx.strokeStyle=css.getPropertyValue('--muted');ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x(hover),T);ctx.lineTo(x(hover),B);ctx.stroke();}ctx.restore();ctx.fillStyle=css.getPropertyValue('--muted');ctx.textAlign='center';for(const tick of timeTicks(t0,t1,R-L)){const xx=L+(R-L)*(span?(tick.time-t0)/span:0);ctx.strokeStyle=css.getPropertyValue('--grid');ctx.beginPath();ctx.moveTo(xx,T);ctx.lineTo(xx,B);ctx.stroke();ctx.fillText(tick.label,xx,h-10);}$('#tooltip').hidden=hover==null;if(hover!=null)$('#tooltip').textContent=[timeLabel(hover,true),...es.map(e=>`${e.label}: ${Number.isFinite(value(state.points[hover],e.key))?value(state.points[hover],e.key).toPrecision(8):'Unavailable'} ${signals[state.series].unit}`)].join('\n');}
 const chart=$('#chart');chart.addEventListener('wheel',e=>{if(!state.points.length)return;e.preventDefault();const f=xFraction(e),[a,b]=state.range,width=(b-a)*Math.exp(Math.max(-1,Math.min(1,e.deltaY*.002))),anchor=a+f*(b-a);setRange(anchor-f*width,anchor+(1-f)*width);},{passive:false});

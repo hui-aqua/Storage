@@ -34,6 +34,10 @@ RAW v1/v2 and SUMMARY v1/v2/v3 are supported. The new firmware writes `_v3.bin`,
 
 ## Explore measurements
 
+Choose **Time Zone** above the chart. **Browser Local** is the default and uses the browser's detected IANA timezone. **Europe/Oslo** and **UTC** are also available. Switching updates axis labels, the visible-range label and any open tooltip immediately. The selected timezone appears near the chart, with abbreviations and UTC offsets for the visible endpoints. Oslo automatically uses CET in winter and CEST in summer. A range crossing a daylight-saving transition can show both offsets.
+
+Hover tooltips show the selected local date/time and a separate UTC endpoint for engineering inspection. Repeated local clock times at the autumn DST transition retain their UTC ordering and can be distinguished by tooltip timezone abbreviations and UTC values. Local files and cloud SUMMARY recordings use the same display rules. Source `utc_ms`, measurements, sample count, ordering, downloads and CSV exports retain their original values. Sensor, monotonic, nominal relative and record-order charts retain their existing time basis.
+
 Choose a **Signal**: acceleration (g), gyroscope (degrees/s), recorded peaks, temperature (degrees C), battery (mV), missed samples, samples per summary, or saturation. Unavailable signal types are disabled. RAW has no temperature or battery values.
 
 For vector signals, toggle **X**, **Y**, **Z** and **Magnitude**. Acceleration includes gravity. Magnitude calculated from mean axes differs from recorded peak magnitude.

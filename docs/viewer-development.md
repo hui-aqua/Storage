@@ -24,6 +24,8 @@ This check requires SUMMARY with no incomplete tail and compares retained motion
 
 ## Browser acceptance checklist
 
+For timezone acceptance, open a local SUMMARY and a cloud SUMMARY, then switch Browser Local, Europe/Oslo and UTC while zoomed and hovering. Confirm immediate axis/range/tooltip updates and the active-zone indicator. Check Oslo winter (+1), summer (+2), spring 2026-03-29 at 01:00 UTC and autumn 2026-10-25 at 01:00 UTC. Confirm unchanged UTC timestamps, ordering, measurements, sample count and downloads. The automated VM checks cover these conversions, source invariance and both loading paths. Native browser rendering remains a manual acceptance step.
+
 1. Serve the viewer as described in the manuals. Check layout at 1366×768, 1920×1080 and narrow phone width.
 2. Open real RAW v1/v2 and SUMMARY v1/v2/v3 and compare values with the format reference. Check header-only, partial-tail and malformed files.
 3. Drop a recording from Explorer. Download the original and compare bytes.
