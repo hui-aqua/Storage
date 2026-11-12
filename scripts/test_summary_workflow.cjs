@@ -1,4 +1,4 @@
-﻿const fs = require('node:fs');
+const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const { webcrypto } = require('node:crypto');
@@ -24,9 +24,9 @@ function summaryFixture({version=2, hz=1, count=5, device='CS3_03', invalidUtc=f
 module.exports={summaryFixture};
 if(require.main===module){
 (async()=>{
- const context=vm.createContext({ArrayBuffer,Uint8Array,DataView,TextDecoder,Request,Response,Headers,File,URL,crypto:webcrypto,console});
+ const context=vm.createContext({ArrayBuffer,Uint8Array,DataView,TextDecoder,Request,Response,Headers,File,URL,crypto:webcrypto,console,devices:JSON.parse(fs.readFileSync("dashboard/devices.json","utf8"))});
  vm.runInContext(fs.readFileSync('dashboard/decoder.js','utf8'),context);
- vm.runInContext(fs.readFileSync('backend/worker/index.js','utf8').replace('import "../../dashboard/decoder.js";','').replace('export default {','globalThis.worker = {'),context);
+ vm.runInContext(fs.readFileSync('backend/worker/index.js','utf8').replace('import "../../dashboard/decoder.js";','').replace('import devices from "../../dashboard/devices.json";','').replace('export default {','globalThis.worker = {'),context);
  assert.equal(context.motionCrc32(new TextEncoder().encode('123456789').buffer),'cbf43926');
  const objects=new Map(); let puts=0;
  const bucket={
@@ -42,6 +42,11 @@ if(require.main===module){
   const response=await context.worker.fetch(new Request('https://test/api/v1/upload',{method:'POST',headers:{Authorization:`Bearer ${key}`},body:form}),env);
   return {status:response.status,body:await response.json()};
  }
+ const backup=await upload(summaryFixture({device:'CS3_00'}),{device_id:'CS3_00'});assert.equal(backup.status,200);
+ const backupListing=await context.worker.fetch(new Request('https://test/api/v1/files?device=CS3_00'),env);assert.equal((await backupListing.json()).files.length,1);
+ const downloadBackup=await context.worker.fetch(new Request('https://test/api/v1/files/content?key='+encodeURIComponent(backup.body.path)),env);assert.equal(downloadBackup.status,200);
+ assert.equal((await upload(summaryFixture({device:'CS3_99'}),{device_id:'CS3_99'})).status,422);
+ objects.clear();puts=0;
  const first=summaryFixture();const stored=await upload(first);assert.equal(stored.status,200);assert.equal(stored.body.status,'STORED');assert.equal(stored.body.summary_hz,1);assert.equal(stored.body.record_count,5);
  const duplicate=await upload(first,{},'different-name.bin');assert.equal(duplicate.body.status,'ALREADY_EXISTS');assert.equal(duplicate.body.path,stored.body.path);assert.equal(puts,1);
  const larger=await upload(summaryFixture({count:8}));assert.equal(larger.body.status,'STORED');assert.notEqual(larger.body.path,stored.body.path);assert.equal(objects.size,2);

@@ -112,7 +112,7 @@ Use HTTPS for production uploads. Worker deployment is separate from Pages deplo
 | `DEVICE_API_KEY` | Worker secret; FastAPI environment with default `dev-test-key` | Exact Bearer credential; Worker has no default |
 | `DATA_DIR` | FastAPI environment, default `data/uploads` | Relative to process working directory unless absolute |
 | `UPLOADS` | Wrangler R2 binding, bucket `marine-motion-uploads` | Worker persistence |
-| `READ_DEVICES` | Worker: CS01-CS04 and CS3_01-CS3_04 | Read allowlist; also encoded in key regex and HTML options |
+| `READ_DEVICES` | `dashboard/devices.json` | Shared allowlist for Worker, FastAPI and dashboard |
 | `ALLOWED_ORIGINS` | Worker | `https://hui-aqua.github.io`, `http://localhost:8000`, `http://127.0.0.1:8000` |
 | Deployment | `wrangler.jsonc` | Name `marine-motion-storage-api`; entry `backend/worker/index.js`; compatibility date `2026-11-10` |
 | Theme | Browser local storage `motion-theme` | light/dark/system; default light |
@@ -128,7 +128,7 @@ Both backends accept authenticated multipart POST /api/v1/upload with Authorizat
 | Field | Validation |
 |---|---|
 | file | Complete aligned SUMMARY binary, <=10 MiB; .bin suffix is case insensitive |
-| device_id | CS01-CS04 or CS3_01-CS3_04; must match header device |
+| device_id | Listed in `dashboard/devices.json`; must match header device |
 | timestamp | ISO-8601 with timezone; converted to UTC |
 | date | YYYY-MM-DD equal to timestamp's UTC date; today/partial-day accepted |
 | summary_hz | V3: 1, agreeing with header; legacy: 1 or 10 as explicit metadata |
@@ -263,7 +263,7 @@ For a binary version, update `parseHeader()` validation and record decoding toge
 
 Worker imports the shared decoder as a side-effect module; keep it browser/Worker compatible (no DOM access during initialization). V3 branches explicitly on format_version=3, validates summary_hz/time_basis and preserves legacy reserved-byte interpretation. RAW version 3 remains unsupported.
 
-For a device, update Worker `READ_DEVICES`, `validR2Key()` and HTML selector together. For upload metadata or limits, update both backends and verify external uploader compatibility. The SUMMARY upload path validates binary structure using the shared decoder. V3 nominal rate is embedded at offset 14; legacy nominal rate remains external metadata. Metadata/header disagreement is a validation error.
+To add a device, edit only `dashboard/devices.json`. CS3_00 is included as a backup. Redeploy the Worker and dashboard, and restart FastAPI if used. SUMMARY device IDs must fit the 16-byte header and match the upload device_id. For upload metadata or limits, update both backends and verify external uploader compatibility. The SUMMARY upload path validates binary structure using the shared decoder. V3 nominal rate is embedded at offset 14; legacy nominal rate remains external metadata. Metadata/header disagreement is a validation error.
 
 Full-bandwidth analysis needs all records or a separate streaming path. Retained plot points are unsuitable for original-sample FFT/PSD or guaranteed peak detection.
 

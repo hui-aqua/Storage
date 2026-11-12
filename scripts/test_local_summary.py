@@ -40,6 +40,8 @@ async def run():
                           authorization=f'Bearer {main.DEVICE_API_KEY}')
             fields.update(changes)
             return await main.upload(file=UploadFile(filename='summary.bin', file=io.BytesIO(content)), **fields)
+        backup = fixture().replace(b'CS3_03', b'CS3_00', 1)
+        assert (await send(backup, device_id='CS3_00'))['status'] == 'STORED'
         first = await send(fixture())
         assert first['status'] == 'STORED'
         assert (await send(fixture()))['status'] == 'ALREADY_EXISTS'

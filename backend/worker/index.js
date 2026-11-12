@@ -1,8 +1,9 @@
 import "../../dashboard/decoder.js";
+import devices from "../../dashboard/devices.json";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
-const READ_DEVICES = new Set(["CS01", "CS02", "CS03", "CS04", "CS3_01", "CS3_02", "CS3_03", "CS3_04"]);
+const READ_DEVICES = new Set(devices);
 const ALLOWED_ORIGINS = new Set([
   "https://hui-aqua.github.io",
   "http://localhost:8000",
@@ -39,7 +40,7 @@ function withReadCors(request, response) {
 }
 
 function validR2Key(key) {
-  const match = /^(CS0[1-4]|CS3_0[1-4])\/(\d{4})\/(\d{2})\/(\d{2})\/([A-Za-z0-9][A-Za-z0-9._-]*\.bin)$/.exec(key);
+  const match = /^([A-Za-z0-9_-]{1,64})\/(\d{4})\/(\d{2})\/(\d{2})\/([A-Za-z0-9][A-Za-z0-9._-]*\.bin)$/.exec(key);
   if (!match || !READ_DEVICES.has(match[1])) return false;
   const [, , year, month, day] = match;
   const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));

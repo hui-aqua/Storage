@@ -15,6 +15,7 @@ MAX_FILE_BYTES = 10 * 1024 * 1024
 DATA_DIR = Path(os.getenv("DATA_DIR", "data/uploads"))
 DEVICE_API_KEY = os.getenv("DEVICE_API_KEY", "dev-test-key")
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+READ_DEVICES = frozenset(json.loads((Path(__file__).resolve().parents[2] / "dashboard" / "devices.json").read_text(encoding="utf-8")))
 app = FastAPI(title="Marine Data Logger Upload API", version="0.1.0")
 
 @app.get("/health")
@@ -52,7 +53,7 @@ async def upload(file: UploadFile = File(...), device_id: str = Form(...), times
         actual_crc = f"{zlib.crc32(content):08x}"
         if hz not in (1, 10) or (sampling_frequency is not None and sampling_frequency != hz):
             raise HTTPException(status_code=422, detail="Invalid or conflicting SUMMARY frequency")
-        if not re.fullmatch(r"(?:CS0[1-4]|CS3_0[1-4])", device_id):
+        if device_id not in READ_DEVICES:
             raise HTTPException(status_code=422, detail="Unsupported SUMMARY device")
         if date != captured.astimezone(timezone.utc).strftime("%Y-%m-%d"):
             raise HTTPException(status_code=422, detail="date must match timestamp UTC date")
