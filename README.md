@@ -36,7 +36,7 @@ RAW v1/v2 and SUMMARY v1/v2/v3 are supported. The new firmware writes `_v3.bin`,
 
 Choose **Time Zone** above the chart. **Browser Local** is the default and uses the browser's detected IANA timezone. **Europe/Oslo** and **UTC** are also available. Switching updates axis labels, the visible-range label and any open tooltip immediately. The selected timezone appears near the chart, with abbreviations and UTC offsets for the visible endpoints. Oslo automatically uses CET in winter and CEST in summer. A range crossing a daylight-saving transition can show both offsets.
 
-Hover tooltips show the selected local date/time and a separate UTC endpoint for engineering inspection. Repeated local clock times at the autumn DST transition retain their UTC ordering and can be distinguished by tooltip timezone abbreviations and UTC values. Local files and cloud SUMMARY recordings use the same display rules. Source `utc_ms`, measurements, sample count, ordering, downloads and CSV exports retain their original values. Sensor, monotonic, nominal relative and record-order charts retain their existing time basis.
+Hover tooltips show only the timestamp in the selected timezone on their first line; signal values and window/sample/loss details follow. Local files and cloud SUMMARY recordings use the same display rules. Source `utc_ms`, measurements, sample count, ordering, downloads and CSV exports retain their original values. Sensor, monotonic, nominal relative and record-order charts retain their existing time basis.
 
 Choose a **Signal**: acceleration (g), gyroscope (degrees/s), recorded peaks, temperature (degrees C), battery (mV), missed samples, samples per summary, or saturation. Unavailable signal types are disabled. RAW has no temperature or battery values.
 
@@ -46,13 +46,13 @@ For vector signals, toggle **X**, **Y**, **Z** and **Magnitude**. Acceleration i
 |---|---|
 | Zoom around the pointer | Scroll over the plot |
 | Pan | Drag with **Pan** selected |
-| Zoom to an interval | Shift-drag, or choose **Select range** and drag |
+| Select an interval for statistics | Shift-drag, or choose **Select range** and drag; selection stays highlighted |
 | Navigate a range | Move **Start** and **End** sliders |
 | Inspect values | Hover over the chart |
 | Restore full recording | **Reset zoom**, double-click, or Home with plot focused |
 | Keyboard navigation | Focus plot; left/right pan, +/− zoom |
 
-On phones and tablets, tap the plot to inspect a record, drag with one finger to pan, and pinch with two fingers to zoom around their midpoint. Choose **Gesture > Select range** and drag across an interval to zoom into it. **Reset zoom** restores the full recording. Touch controls have larger targets and the toolbar wraps on narrow screens.
+On phones and tablets, tap the plot to inspect a record, drag with one finger to pan, and pinch with two fingers to zoom around their midpoint. Choose **Gesture > Select range** and drag across an interval to leave a pale blue analysis selection without changing the zoom. Range statistics use the selected records, including when you subsequently pan or zoom with the mouse wheel or a two-finger pinch. **Clear selection** (or Escape on a keyboard) returns statistics to the visible range. Opening another recording also clears the selection. **Reset zoom** restores the full recording. Touch controls have larger targets and the toolbar wraps on narrow screens.
 
 The data tooltip shows only the selected Time Zone timestamp on its first line. Signal values follow; v3 window semantics, sample count and timing/loss flags appear at the end.
 

@@ -49,3 +49,5 @@ The fixture writes format_version=3, uint16 summary_hz=1 at header offset 14 and
 ## Touch interaction acceptance
 
 The VM regression exercises tap inspection without viewport movement, two-finger pinch zoom, zoom-out limits, transition from pinch to one-finger pan, touch range selection, and cancellation without committing a selection. Tooltip assertions verify that the selected-zone timestamp is first and sample/loss details follow signal values. On physical phones/tablets, check portrait and landscape, toolbar wrapping, readable tooltips, pinch around different anchors, continued pan after lifting one finger, and scrolling the page outside the plot. Native browser checks remain separate from the VM harness.
+
+Analysis selections persist independently of the viewport in data-time coordinates. Tests verify that selection leaves the viewport unchanged, statistics match records within selection endpoints, subsequent zoom leaves selected statistics unchanged, and clearing restores visible-range statistics. Cancelled drags preserve the previous selection; opening another file clears it.
