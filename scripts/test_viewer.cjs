@@ -5,6 +5,19 @@ class TestURL extends URL { static createObjectURL(){return "blob:test"} static 
 const ctx=vm.createContext({document,window:{},URL:TestURL,Option:function(text,value){this.text=text;this.value=value},ArrayBuffer,Uint8Array,DataView,TextDecoder,BigInt,console,devicePixelRatio:1,matchMedia:()=>({matches:false,addEventListener:noop}),localStorage:{getItem:()=>null,setItem:noop},getComputedStyle:()=>({getPropertyValue:()=> '#888'}),ResizeObserver:class{observe(){}},fetch:async url=>String(url).endsWith('devices.json')?{ok:true,json:async()=>JSON.parse(fs.readFileSync('dashboard/devices.json','utf8'))}:{ok:false,status:404}});ctx.window=ctx;el('#signal').options=['acc','gyro','temperature','battery'].map(value=>({value}));Object.defineProperty(el('#signal'),'selectedOptions',{get(){return this.options.filter(o=>o.value===this.value)}});vm.runInContext(fs.readFileSync('dashboard/decoder.js','utf8'),ctx);vm.runInContext(fs.readFileSync('dashboard/app.js','utf8'),ctx);
 function fixture(kind,version,count=100){const raw=kind==='raw',header=raw?(version===1?73:81):(version===1?32:75),record=raw?22:90;const b=new ArrayBuffer(header+record*count),v=new DataView(b),u=new Uint8Array(b);u.set(Buffer.from(raw?'CS3RAW01':'CS3SUM01'));v.setUint16(8,version,true);v.setUint16(10,header,true);u.set(Buffer.from('CS3_01'),raw?12:16);if(raw){v.setInt16(65,8,true);v.setInt16(67,1000,true);v.setUint16(69,100,true);v.setUint16(71,22,true);}else v.setUint16(12,90,true);for(let i=0;i<count;i++){let o=header+i*record;if(raw){v.setBigUint64(o,BigInt(i*10000),true);v.setInt16(o+8,4096,true);v.setUint16(o+20,3,true);}else{v.setBigUint64(o,BigInt(1794355200000+i*100),true);v.setInt32(o+22,1000,true);v.setInt32(o+30,-500,true);v.setInt16(o+78,2350,true);v.setUint16(o+80,3800,true);v.setUint16(o+20,10,true);v.setUint16(o+88,32,true);}}return b;}
 (async()=>{await vm.runInContext('devicesReady',ctx);assert.ok(el('#cloud-device').children.some(o=>o.value==='CS3_00'));for(const kind of ['raw','summary'])for(const version of [1,2]){const r=ctx.decodeBinary(fixture(kind,version));assert.equal(r.recordCount,100);assert.equal(r.points[0].ax,1);await ctx.openLocal({name:`${kind}.bin`,size:100,arrayBuffer:async()=>fixture(kind,version)});assert.equal(vm.runInContext('state.points.length',ctx),100);assert.equal(el('#original').getAttribute('aria-disabled'),'false');}vm.runInContext("state.series='battery';update()",ctx);assert.equal(vm.runInContext('state.points[0].batteryMv',ctx),3800);vm.runInContext("state.series='acc';state.enabled.delete('y');setRange(.2,.5)",ctx);assert.equal(ctx.entries().length,2);assert.ok(vm.runInContext('state.range[1]<1',ctx));el('#analysis').open=true;ctx.statistics();assert.equal(el('#stats').children.length,2);el('#theme').value='dark';ctx.applyTheme();assert.equal(document.documentElement.dataset.theme,'dark');el('#theme').value='system';ctx.applyTheme();assert.equal(document.documentElement.dataset.theme,'light');ctx.setRange(0,1);el('#chart').events.wheel({preventDefault:noop,clientX:600,deltaY:-200});assert.ok(vm.runInContext('state.range[1]-state.range[0]<1',ctx));el('#chart').events.pointermove({clientX:600});assert.equal(el('#tooltip').hidden,false);ctx.setRange(0,1);el('#chart').events.pointerdown({clientX:300,pointerId:1,shiftKey:true});el('#chart').events.pointermove({clientX:800});el('#chart').events.pointerup({});assert.ok(vm.runInContext('state.range[0]>0 && state.range[1]<1',ctx));ctx.setRange(0,1);el('#chart').events.keydown({key:'+',preventDefault:noop});assert.ok(vm.runInContext('state.range[1]-state.range[0]<1',ctx));await ctx.fetchCloudFiles();assert.match(el('#cloud-status').textContent,/Local files/);assert.equal(vm.runInContext('state.points.length',ctx),100);await events.drop({preventDefault:noop,dataTransfer:{files:[{name:'dropped.bin',size:9075,arrayBuffer:async()=>fixture('summary',2)}]}});await new Promise(setImmediate);assert.equal(el('#chart-title').textContent,'dropped.bin');
+// Touch: a tap inspects without changing the viewport; pinch anchors and transitions to pan.
+const pointer=(id,x,y=150)=>({pointerId:id,pointerType:'touch',clientX:x,clientY:y});
+const down=e=>el('#chart').events.pointerdown(e),move=e=>el('#chart').events.pointermove(e),up=e=>el('#chart').events.pointerup(e);
+ctx.setRange(.2,.8);const tapRange=JSON.stringify(vm.runInContext('state.range',ctx));
+down(pointer(1,500));move(pointer(1,502));up(pointer(1,502));
+assert.equal(JSON.stringify(vm.runInContext('state.range',ctx)),tapRange);assert.equal(el('#tooltip').hidden,false);
+ctx.setRange(0,1);down(pointer(1,400));down(pointer(2,800));move(pointer(1,200));move(pointer(2,1000));
+let pinchRange=vm.runInContext('state.range.slice()',ctx);assert.ok(Math.abs((pinchRange[1]-pinchRange[0])-.5)<.001);
+up(pointer(2,1000));const beforePan=vm.runInContext('state.range[0]',ctx);move(pointer(1,300));assert.ok(vm.runInContext('state.range[0]',ctx)<beforePan);up(pointer(1,300));
+assert.equal(vm.runInContext('pointers.size',ctx),0);
+ctx.setRange(.2,.8);down(pointer(1,400));down(pointer(2,800));move(pointer(1,550));move(pointer(2,650));assert.equal(vm.runInContext('state.range[1]-state.range[0]',ctx),1);up(pointer(2,650));up(pointer(1,550));
+el('#drag-mode').value='select';ctx.setRange(0,1);down(pointer(1,300));move(pointer(1,800));up(pointer(1,800));assert.ok(vm.runInContext('state.range[0]>0 && state.range[1]<1',ctx));
+const selectedRange=JSON.stringify(vm.runInContext('state.range',ctx));down(pointer(1,300));move(pointer(1,800));el('#chart').events.pointercancel(pointer(1,800));assert.equal(JSON.stringify(vm.runInContext('state.range',ctx)),selectedRange);assert.equal(vm.runInContext('pointers.size',ctx),0);el('#drag-mode').value='pan';
 // Export must retain every record even when the plot is downsampled.
 for(const kind of ['raw','summary'])for(const version of [1,2]){
  const buffer=fixture(kind,version,24001),decoded=ctx.decodeBinary(buffer);
@@ -92,7 +105,7 @@ for(const source of ['local','remote']){
   el('#timezone').value=zone;el('#timezone').onchange();
   assert.equal(vm.runInContext('JSON.stringify({points:state.points,times:state.times,range:state.range})',ctx),before);
   assert.equal(Buffer.from(timezoneBuffer).toString('hex'),bytes);
-  assert.match(ctx.timeLabel(0),/Local:.*\nUTC: 2026-03-29 00:59:59.000 UTC/s);
+  assert.equal(ctx.timeLabel(0),ctx.displayTimestamp(vm.runInContext('state.times[0]',ctx)));assert.ok(!ctx.timeLabel(0).includes('\n'));
   const resolved=zone==='browser'?vm.runInContext('Intl.DateTimeFormat().resolvedOptions().timeZone',ctx):zone;
   assert.ok(el('#active-timezone').textContent.includes(resolved));
   if(zone==='UTC')assert.equal(ctx.axisLabel(transitionTimes[0],1000),'00:59:59');
@@ -104,7 +117,7 @@ for(const source of ['local','remote']){
    assert.match(ctx.displayTimestamp(Date.parse('2026-11-11T12:00:00Z')),/2026-11-11 13:00:00.000 CET/);
    assert.match(ctx.displayTimestamp(Date.parse('2026-07-11T12:00:00Z')),/2026-07-11 14:00:00.000 CEST/);
    ctx.setRange(0,.4);assert.match(el('#active-timezone').textContent,/CET, UTC\+1 → CEST, UTC\+2/);ctx.setRange(0,1);
-   el('#chart').events.pointermove({clientX:600});assert.match(el('#tooltip').textContent,/Local:.*\nUTC:/s);
+   el('#chart').events.pointermove({clientX:600});assert.equal(el('#tooltip').textContent.split('\n')[0],ctx.timeLabel(vm.runInContext('hover',ctx),true));assert.ok(!el('#tooltip').textContent.includes('UTC:'));
   }
  }
 }
@@ -142,7 +155,7 @@ assert.equal(v3decoded.points[0].windowStartUtcMs,'1794355200000');assert.equal(
 assert.equal(v3decoded.points[0].windowStartMonotonicUs,'0');assert.equal(v3decoded.points[2].gapBefore,true);assert.equal(v3decoded.points[2].timingWarning,true);assert.equal(v3decoded.points[2].emptyIntervalGap,true);
 await ctx.openLocal({name:'not-a-version-hint.bin',size:v3buffer.byteLength,arrayBuffer:async()=>v3buffer});
 assert.equal(vm.runInContext('state.meta.summaryHz',ctx),1);assert.equal(vm.runInContext('state.clock',ctx),'utc');assert.equal(vm.runInContext('state.times[2]-state.times[1]',ctx),3000);
-assert.match(el('#measurement').textContent,/SUMMARY v3.*1 Hz \(v3 header\)/);assert.match(ctx.timeLabel(0),/exclusive window end/);assert.match(ctx.timeLabel(2),/timing warning.*empty interval gap/);
+assert.match(el('#measurement').textContent,/SUMMARY v3.*1 Hz \(v3 header\)/);assert.match(ctx.pointDetails(0).join(' '),/exclusive end/);ctx.inspectPoint(.5);const tooltipLines=el('#tooltip').textContent.split('\n');assert.equal(tooltipLines[0],ctx.timeLabel(vm.runInContext('hover',ctx),true));assert.match(tooltipLines.at(-1),/samples/);assert.ok(!/samples|loss|Local:|UTC:/.test(tooltipLines[0]));assert.match(ctx.pointDetails(2).join(' '),/timing warning.*empty interval gap/);
 assert.equal(vm.runInContext('state.points.length',ctx),3);assert.equal(el('#original').getAttribute('aria-disabled'),'false');
 const v3csv=ctx.binaryCsv(v3buffer);assert.match(v3csv,/header_timeBasis/);assert.match(v3csv,/windowStartMonotonicUs/);assert.equal(v3csv.trim().split('\r\n').length,4);
 const v3unsynced=summaryFixture({version:3,count:3,windows:[0,1,4],invalidUtc:true});

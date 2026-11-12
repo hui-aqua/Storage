@@ -52,6 +52,10 @@ For vector signals, toggle **X**, **Y**, **Z** and **Magnitude**. Acceleration i
 | Restore full recording | **Reset zoom**, double-click, or Home with plot focused |
 | Keyboard navigation | Focus plot; left/right pan, +/− zoom |
 
+On phones and tablets, tap the plot to inspect a record, drag with one finger to pan, and pinch with two fingers to zoom around their midpoint. Choose **Gesture > Select range** and drag across an interval to zoom into it. **Reset zoom** restores the full recording. Touch controls have larger targets and the toolbar wraps on narrow screens.
+
+The data tooltip shows only the selected Time Zone timestamp on its first line. Signal values follow; v3 window semantics, sample count and timing/loss flags appear at the end.
+
 The range label shows the span between visible record timestamps. RAW uses relative sensor time. Legacy SUMMARY timestamps are emission times. V3 timestamps mark exclusive ends of completed approximately one-second windows: a record at 12:00:01 describes [12:00:00, 12:00:01). Each nonempty completed interval uses all samples actually collected; sample count can vary. Empty intervals are omitted and unfinished final intervals are discarded on Stop. No data is generated to fill those gaps.
 
 V3 uses valid recorded UTC, or recorded host monotonic window ends if UTC is unusable. If both clocks are discontinuous (for example across reboot appends), the chart uses record order. Legacy files retain their previous metadata-based nominal-time or record-order fallback.

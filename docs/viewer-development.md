@@ -45,3 +45,7 @@ Generated fixtures retain the v1/v2 byte layouts and vary record timestamps/samp
 ## V3 acceptance
 
 The fixture writes format_version=3, uint16 summary_hz=1 at header offset 14 and uint8 time_basis=1 at 70, with 75-byte header and 90-byte records. Test exclusive ends, variable sample counts, omitted windows, timing/gap status, UTC-to-monotonic fallback, reboot-clock reset, CRC upload/dedup, header-only local decode versus upload rejection, metadata conflicts, wrong rate/time_basis and local filenames with no version hint. Confirm a v2 header with reserved bytes set to 1 remains v2 and has no inferred rate. Confirm gap flags hidden by subsampling still break plot lines. Native browser acceptance and live R2 remain separate from the VM/in-memory tests.
+
+## Touch interaction acceptance
+
+The VM regression exercises tap inspection without viewport movement, two-finger pinch zoom, zoom-out limits, transition from pinch to one-finger pan, touch range selection, and cancellation without committing a selection. Tooltip assertions verify that the selected-zone timestamp is first and sample/loss details follow signal values. On physical phones/tablets, check portrait and landscape, toolbar wrapping, readable tooltips, pinch around different anchors, continued pan after lifting one finger, and scrolling the page outside the plot. Native browser checks remain separate from the VM harness.
